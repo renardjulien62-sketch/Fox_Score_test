@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
@@ -31,7 +32,7 @@
 
         <nav id="side-nav">
             <div id="nav-logo">
-                <img src="FoxScore.png" alt="FoxScore" style="width: 100%; height: auto; max-width: 150px;">
+                <i class="fa-solid fa-fox" style="font-size: 4em; color: #663C1F;"></i>
             </div>
             <div id="nav-links">
                 <a href="#" class="nav-link active" data-page="page-new-game">Nouvelle Partie</a>
@@ -103,11 +104,19 @@
                 <h2>Mes Amis</h2>
                 <div class="input-group">
                     <h3>Ajouter un ami</h3>
-                    <p style="width:100%; font-size: 0.9em; color: #666; margin-bottom: 10px;">Entrez l'adresse email de votre ami (il doit déjà avoir un compte Fox Score).</p>
-                    <input type="email" id="friend-email-input" placeholder="Email de l'ami">
-                    <button id="btn-add-friend">Ajouter</button>
+                    <p style="width:100%; font-size: 0.9em; color: #666; margin-bottom: 10px;">Recherchez par email, puis choisissez un surnom et une couleur.</p>
+                    
+                    <div class="add-friend-form">
+                        <input type="email" id="friend-email-input" placeholder="Email de l'ami (ex: ami@test.com)">
+                        <div class="friend-details-inputs">
+                            <input type="text" id="friend-nickname-input" placeholder="Surnom (Optionnel)">
+                            <input type="color" id="friend-color-input" value="#36A2EB" title="Choisir une couleur">
+                        </div>
+                        <button id="btn-add-friend">Ajouter</button>
+                    </div>
                     <p id="friend-add-msg" class="cache"></p>
                 </div>
+
                 <div class="input-group">
                     <h3>Liste d'amis</h3>
                     <div id="friends-list-container" style="width: 100%;">
