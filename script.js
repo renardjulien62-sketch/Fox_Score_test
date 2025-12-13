@@ -13,7 +13,7 @@ let joueursRecents = [];
 let allHistoryData = []; 
 let mesAmis = []; 
 
-// NOUVEAU : Stocke ton profil localement pour l'ajouter par défaut
+// Profil local
 let monProfilLocal = { nom: '', couleur: '#e67e22', uid: null };
 
 let monGraphiquePosition = null;
@@ -43,7 +43,7 @@ let partieIdActuelle = null;
 let currentUser = null;
 
 // =============================================================
-// 2. SÉLECTION DOM
+// 2. SÉLECTION DES ÉLÉMENTS HTML (DOM)
 // =============================================================
 // Auth
 const authEcran = document.getElementById('auth-ecran');
@@ -142,20 +142,19 @@ const profileMsg = document.getElementById('profile-msg');
 
 
 // =============================================================
-// 3. NAVIGATION
+// 3. NAVIGATION & UI
 // =============================================================
 function showPage(pageId) {
     allPages.forEach(page => page.classList.add('cache'));
     const pageToShow = document.getElementById(pageId);
-    if (pageToShow) pageToShow.classList.remove('cache');
-    
+    if (pageToShow) {
+        pageToShow.classList.remove('cache');
+    }
     navLinks.forEach(link => {
         link.classList.toggle('active', link.dataset.page === pageId);
     });
-    
-    // Logique spéciale : Si on va sur "Nouvelle Partie", on reset proprement
-    if (pageId === 'page-new-game') {
-        // Optionnel : on pourrait vouloir reset ici, mais on le fait plutôt à la fin de partie
+    if (pageId === 'page-history-details') {
+        document.querySelector('.nav-link[data-page="page-history-grid"]').classList.add('active');
     }
 }
 navLinks.forEach(link => {
@@ -171,7 +170,7 @@ function afficherAuthErreur(message) {
 }
 
 // =============================================================
-// 4. AUTH & INITIALISATION UTILISATEUR
+// 4. AUTHENTIFICATION
 // =============================================================
 btnShowLogin.onclick = () => { authButtonsStart.classList.add('cache'); formLogin.classList.remove('cache'); authErreur.classList.add('cache'); };
 btnShowSignup.onclick = () => { authButtonsStart.classList.add('cache'); formSignup.classList.remove('cache'); authErreur.classList.add('cache'); };
@@ -209,42 +208,43 @@ submitLogin.addEventListener('click', () => {
 
 logoutBtn.addEventListener('click', () => { auth.signOut(); });
 
-// === CŒUR DE L'INITIALISATION ===
+// INITIALISATION AU CHARGEMENT
 auth.onAuthStateChanged(user => {
     if (user) {
         currentUser = user;
         authEcran.classList.add('cache');
         appLayout.classList.remove('cache'); 
         
-        // Charger le profil complet
         db.collection('utilisateurs').doc(user.uid).get().then(doc => {
+            let pseudoAffiche = user.email;
+            let couleurAffiche = "#e67e22";
             if(doc.exists) {
                 const data = doc.data();
-                // Mise à jour de la variable globale
-                monProfilLocal.nom = data.pseudo || user.email.split('@')[0];
-                monProfilLocal.couleur = data.couleur || '#e67e22';
-                monProfilLocal.uid = user.uid;
+                if(data.pseudo) pseudoAffiche = data.pseudo;
+                if(data.couleur) couleurAffiche = data.couleur;
             } else {
-                // Fallback
-                monProfilLocal.nom = user.email.split('@')[0];
-                monProfilLocal.uid = user.uid;
-                creerProfilPublic(user, monProfilLocal.nom, monProfilLocal.couleur);
+                creerProfilPublic(user, user.email.split('@')[0], genererCouleurAleatoire());
             }
             
-            // Mise à jour UI Profil
-            navUserProfile.textContent = monProfilLocal.nom;
-            profilePseudoInput.value = monProfilLocal.nom;
-            profileColorInput.value = monProfilLocal.couleur;
+            // Mise à jour variables globales
+            monProfilLocal.nom = pseudoAffiche;
+            monProfilLocal.couleur = couleurAffiche;
+            monProfilLocal.uid = user.uid;
 
-            // IMPORTANT : Initialiser la liste des joueurs avec MOI par défaut
+            // Mise à jour UI
+            navUserProfile.textContent = pseudoAffiche;
+            profilePseudoInput.value = pseudoAffiche;
+            profileColorInput.value = couleurAffiche;
+
+            // Initialiser listes
             resetConfigurationPartie();
+            chargerAmis(); // Appelé ICI pour avoir le profil prêt
         });
 
         chargerListeParties();
         chargerHistoriqueParties();
         chargerCategoriesConnues();
         chargerJoueursRecents();
-        chargerAmis(); 
         
         showPage('page-new-game'); 
     } else {
@@ -265,25 +265,24 @@ btnUpdateProfile.addEventListener('click', () => {
     const newPseudo = profilePseudoInput.value.trim();
     const newColor = profileColorInput.value;
     if(!newPseudo) { alert("Le pseudo ne peut pas être vide"); return; }
-    
     const userRef = db.collection('utilisateurs').doc(currentUser.uid);
     const publicRef = db.collection('users_public').doc(currentUser.uid);
 
     userRef.set({ pseudo: newPseudo, couleur: newColor }, { merge: true })
     .then(() => publicRef.set({ pseudo: newPseudo, couleur: newColor }, { merge: true }))
     .then(() => {
-        // Mise à jour locale immédiate
+        navUserProfile.textContent = newPseudo;
         monProfilLocal.nom = newPseudo;
         monProfilLocal.couleur = newColor;
-        navUserProfile.textContent = newPseudo;
         
         profileMsg.textContent = "Profil mis à jour !";
         profileMsg.style.color = "green";
         profileMsg.classList.remove('cache');
         setTimeout(() => profileMsg.classList.add('cache'), 3000);
         
-        // Mettre à jour la liste des joueurs si on est en phase de config
-        resetConfigurationPartie(); 
+        // Refresh UI qui dépend du profil
+        resetConfigurationPartie();
+        chargerAmis();
     });
 });
 
@@ -310,14 +309,13 @@ btnUpdatePassword.addEventListener('click', () => {
 
 function genererCouleurAleatoire() { return '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'); }
 
-// NOUVEAU : Fonction pour réinitialiser la liste avec MOI par défaut
 function resetConfigurationPartie() {
     joueurs = [];
     if(monProfilLocal.uid) {
         joueurs.push({
             nom: monProfilLocal.nom,
             couleur: monProfilLocal.couleur,
-            uid: monProfilLocal.uid, // On attache l'UID pour les stats
+            uid: monProfilLocal.uid, 
             scoreTotal: 0, scoresTour: [], rang: null
         });
     }
@@ -332,7 +330,8 @@ ajouterBouton.addEventListener('click', () => {
     const selectedAmiIndex = selectAmiAjout.selectedIndex;
     if (selectedAmiIndex > 0) { 
         const option = selectAmiAjout.options[selectedAmiIndex];
-        nom = option.text; uidAmi = option.value; 
+        nom = option.text.replace('👤 Moi (', '').replace(')', ''); // Nettoyage au cas où on sélectionne "Moi"
+        uidAmi = option.value; 
         if (option.dataset.couleur) couleur = option.dataset.couleur;
     }
 
@@ -358,15 +357,11 @@ selectAmiAjout.addEventListener('change', () => {
 
 function mettreAJourListeJoueurs() { 
     listeJoueursConf.innerHTML = ''; 
-    // On n'affiche pas le message "Ajoutez..." si je suis déjà dedans, sauf si je me retire
     if (joueurs.length === 0) { listeJoueursConf.innerHTML = '<p>Ajoutez des joueurs.</p>'; } 
-    
     joueurs.forEach((joueur, index) => { 
         const tag = document.createElement('div'); tag.className = 'joueur-tag'; 
-        // Petit indicateur visuel si c'est "Moi" (optionnel)
         const isMe = (joueur.uid === currentUser?.uid);
         const nomDisplay = isMe ? `<strong>${joueur.nom} (Moi)</strong>` : joueur.nom;
-        
         tag.innerHTML = `<span class="joueur-couleur-swatch" style="background:${joueur.couleur}"></span>${nomDisplay} <button class="bouton-retirer">&times;</button>`;
         tag.querySelector('button').onclick = () => { joueurs.splice(index, 1); mettreAJourListeJoueurs(); verifierPeutDemarrer(); };
         listeJoueursConf.appendChild(tag); 
@@ -381,7 +376,7 @@ demarrerBouton.addEventListener('click', () => {
     sequenceForceStop = false; 
     if (joueurs.length < 2) return; 
     
-    partieIdActuelle = null; // Nouvelle partie = Nouvel ID
+    partieIdActuelle = null; 
 
     nomJeuActuel = nomJeuConfigInput.value.trim() || "Partie";
     scoresSecrets = modeSecretConfig.checked; 
@@ -389,14 +384,12 @@ demarrerBouton.addEventListener('click', () => {
     lowScoreWins = (victoireChoix === 'low'); 
     mancheActuelle = 0;
     
-    // Reset scores mais garder UIDs
     joueurs.forEach(j => { j.scoreTotal = 0; j.scoresTour = []; j.rang = null; }); 
     
-    // Sauvegarde joueurs récents (sauf moi)
     if (currentUser) {
         const userRef = db.collection('utilisateurs').doc(currentUser.uid);
         joueurs.forEach(j => {
-            if(j.uid !== currentUser.uid) {
+            if(j.uid !== currentUser.uid) { // Save others only
                 userRef.collection('joueursRecents').doc(j.nom).set({ nom: j.nom, couleur: j.couleur });
             }
         });
@@ -420,7 +413,7 @@ demarrerBouton.addEventListener('click', () => {
 });
 
 // =============================================================
-// 7. IN-GAME LOGIC (SAUVEGARDE & TOURS)
+// 7. IN-GAME LOGIC
 // =============================================================
 async function sauvegarderPartieEnCours(isNew = false) {
     if (!currentUser) return;
@@ -472,7 +465,7 @@ function chargerListeParties() {
             const nomJeu = partie.nomJeuActuel || "Jeu";
             
             const div = document.createElement('div'); 
-            div.className = "partie-historique"; // Réutilise le style
+            div.className = "partie-historique"; 
             div.innerHTML = ` 
                 <div class="header-info"> 
                     <span style="font-size:1em;"><strong>${nomJeu}</strong> - Manche ${partie.mancheActuelle} <br><span style="font-size:0.8em; color:#666;">${nomsJoueurs}</span></span> 
@@ -588,7 +581,7 @@ annulerTourBouton.addEventListener('click', () => {
 });
 
 // =============================================================
-// 8. FIN DE PARTIE & STATS AMÉLIORÉES
+// 8. FIN DE PARTIE & STATS
 // =============================================================
 arreterMaintenantBouton.addEventListener('click', terminerPartie);
 
@@ -638,7 +631,6 @@ async function sauvegarderHistoriquePartie(classement) {
     } catch (err) { console.error("Erreur historique: ", err); } 
 }
 
-// === STATS AMÉLIORÉES (AVEC PRIORITÉ UID) ===
 function afficherStatsGlobales() {
     if (allHistoryData.length === 0) return;
 
@@ -651,10 +643,7 @@ function afficherStatsGlobales() {
 
         if (!statsPerfJeu[nomJeu]) { statsPerfJeu[nomJeu] = { totalPctSum: 0, gameCount: 0 }; }
 
-        // PRIORITÉ 1 : Chercher par UID
         let joueurConnecte = partie.classement.find(j => j.uid === currentUser.uid);
-        
-        // PRIORITÉ 2 : Chercher par nom actuel (compatibilité vieux historiques)
         if (!joueurConnecte && monProfilLocal.nom) {
             joueurConnecte = partie.classement.find(j => j.nom === monProfilLocal.nom);
         }
@@ -687,16 +676,63 @@ function afficherStatsGlobales() {
     const freqTries = Object.entries(partiesParJeu).sort((a,b)=>b[1]-a[1]).slice(0,3);
     statsJeuxFrequenceListe.innerHTML = freqTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join('');
 
-    // 3. Top Joueurs (Adversaires ou Moi)
+    // 3. Top Joueurs
     const compteJoueurs = {};
     allHistoryData.forEach(p => { (p.joueursComplets || p.classement).forEach(j => { compteJoueurs[j.nom] = (compteJoueurs[j.nom]||0)+1; }); });
     const joueursTries = Object.entries(compteJoueurs).sort((a,b)=>b[1]-a[1]).slice(0,3);
     statsJoueursPodiumListe.innerHTML = joueursTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join('');
 }
 
-// --- RESTE (Helpers, Reveal, Graphiques) ---
-// (Identique au code précédent, pas de changement nécessaire)
+// --- AMIS : MISE A JOUR DROPDOWN (AJOUT PROFIL PERSO) ---
+function chargerAmis() { 
+    if (!currentUser) return; 
+    db.collection('utilisateurs').doc(currentUser.uid).collection('amis').get().then(snapshot => { 
+        mesAmis = []; 
+        friendsListContainer.innerHTML = ""; 
+        // MODIFIÉ : Option par défaut
+        selectAmiAjout.innerHTML = '<option value="">-- Choisir un profil --</option>'; 
+        
+        // 1. AJOUTER "MOI" EN PREMIER
+        if (monProfilLocal.nom) {
+            const optMe = document.createElement('option');
+            optMe.value = currentUser.uid;
+            optMe.text = `👤 Moi (${monProfilLocal.nom})`; // Visuel clair
+            optMe.dataset.couleur = monProfilLocal.couleur;
+            selectAmiAjout.appendChild(optMe);
+        }
 
+        if (snapshot.empty) { friendsListContainer.innerHTML = "<p>Pas d'amis.</p>"; return; } 
+        
+        // 2. AJOUTER LES AMIS
+        snapshot.forEach(doc => { 
+            const ami = doc.data(); 
+            mesAmis.push(ami); 
+            const pseudo = ami.surnom || ami.email; 
+            const couleur = ami.couleur || "#CCCCCC"; 
+            const div = document.createElement('div'); 
+            div.className = 'friend-item'; 
+            div.innerHTML = ` 
+                <div class="friend-view"> 
+                    <div class="friend-info"> <span class="friend-color-swatch" style="background-color: ${couleur};"></span> <span>${pseudo}</span> <span class="friend-email">(${ami.email})</span> </div> 
+                    <div class="friend-actions"> <button class="btn-icon btn-edit-friend"><i class="fa-solid fa-pencil"></i></button> <button class="btn-icon btn-delete-friend"><i class="fa-solid fa-trash"></i></button> </div> 
+                </div> 
+                <div class="friend-edit-form"> <input type="text" class="edit-surnom" value="${pseudo}"> <input type="color" class="edit-couleur" value="${couleur}"> <button class="btn-save-friend"><i class="fa-solid fa-check"></i></button> <button class="btn-cancel-friend"><i class="fa-solid fa-times"></i></button> </div> 
+            `; 
+            friendsListContainer.appendChild(div); 
+            const viewDiv = div.querySelector('.friend-view'); const editDiv = div.querySelector('.friend-edit-form'); 
+            viewDiv.querySelector('.btn-edit-friend').onclick = () => { viewDiv.style.display = 'none'; editDiv.style.display = 'flex'; }; 
+            viewDiv.querySelector('.btn-delete-friend').onclick = () => supprimerAmi(ami.uid); 
+            editDiv.querySelector('.btn-cancel-friend').onclick = () => { editDiv.style.display = 'none'; viewDiv.style.display = 'flex'; }; 
+            editDiv.querySelector('.btn-save-friend').onclick = () => { sauvegarderAmi(ami.uid, editDiv.querySelector('.edit-surnom').value, editDiv.querySelector('.edit-couleur').value, pseudo); }; 
+            
+            const opt = document.createElement('option'); 
+            opt.value = ami.uid; opt.text = pseudo; opt.dataset.couleur = couleur; 
+            selectAmiAjout.appendChild(opt); 
+        }); 
+    }); 
+}
+
+// --- RESTE (Helpers, Reveal, Graphiques) ---
 function genererChampsSaisie() { saisiePointsDiv.innerHTML = ''; joueurs.forEach((joueur, index) => { const div = document.createElement('div'); div.className = 'saisie-item'; div.innerHTML = ` <label for="score-${index}"> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} : </label> <input type="number" id="score-${index}" value="0"> `; saisiePointsDiv.appendChild(div); }); }
 function mettreAJourScoresAffichage() { scoreAffichageDiv.innerHTML = ''; let listePourAffichage = []; if (!scoresSecrets) { let joueursTries = [...joueurs].sort((a, b) => { return lowScoreWins ? a.scoreTotal - b.scoreTotal : b.scoreTotal - a.scoreTotal; }); listePourAffichage = calculerRangs(joueursTries); } else { listePourAffichage = joueurs; } let html = '<table class="classement-table">'; html += '<thead><tr><th>#</th><th>Joueur</th><th>Total</th></tr></thead>'; html += '<tbody>'; listePourAffichage.forEach((joueur) => { const rangAffichage = joueur.rang && !scoresSecrets ? joueur.rang : '-'; html += ` <tr> <td>${rangAffichage}</td> <td> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} </td> <td class="score-total">${scoresSecrets ? '???' : `${joueur.scoreTotal} pts`}</td> </tr> `; }); html += '</tbody></table>'; scoreAffichageDiv.innerHTML = html; }
 function mettreAJourCompteurs() { manchesPasseesAffichage.textContent = mancheActuelle; let restantesManches = Infinity; let afficherManchesRestantes = false; if (conditionsArret.manche_total.active) { const totalManches = conditionsArret.manche_total.mancheCible; restantesManches = Math.max(0, totalManches - mancheActuelle); afficherManchesRestantes = true; } if (conditionsArret.manche_restante.active) { const mancheCible = conditionsArret.manche_restante.mancheCible; const restantesDynamiques = Math.max(0, mancheCible - mancheActuelle); restantesManches = Math.min(restantesManches, restantesDynamiques); afficherManchesRestantes = true; } if (afficherManchesRestantes) { manchesRestantesAffichage.textContent = restantesManches; manchesRestantesAffichageDiv.classList.remove('cache'); } else { manchesRestantesAffichageDiv.classList.add('cache'); } let pointsMinRestants = Infinity; let afficherPointsRestants = false; if (conditionsArret.score_limite.active) { const scoreMax = Math.max(...joueurs.map(j => j.scoreTotal)); const restantsAbsolu = Math.max(0, conditionsArret.score_limite.valeur - scoreMax); pointsMinRestants = Math.min(pointsMinRestants, restantsAbsolu); afficherPointsRestants = true; } if (conditionsArret.score_relatif.active) { joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; const restantsRelatif = Math.max(0, limiteCible - joueur.scoreTotal); pointsMinRestants = Math.min(pointsMinRestants, restantsRelatif); }); afficherPointsRestants = true; } if (afficherPointsRestants) { pointsRestantsAffichage.textContent = pointsMinRestants; pointsRestantsAffichageDiv.classList.remove('cache'); } else { pointsRestantsAffichageDiv.classList.add('cache'); } }
@@ -714,7 +750,6 @@ nomJoueurInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { aj
 revealEcran.addEventListener('click', (e) => { if (e.target.closest('#skip-all-btn') || e.target.closest('#reveal-content')) { return; } if (currentStepSkipper) { currentStepSkipper(); } });
 skipAllBtn.addEventListener('click', () => { sequenceForceStop = true; if (currentStepSkipper) { currentStepSkipper(); } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); });
 retourAccueilBtn.addEventListener('click', () => { 
-    // Au retour à l'accueil, on reset la config proprement
     showPage('page-ongoing-games'); 
     const graphContainer = document.querySelector('.graphique-container'); 
     const graphOriginalParent = document.getElementById('page-score').querySelector('.score-gauche'); 
@@ -723,7 +758,6 @@ retourAccueilBtn.addEventListener('click', () => {
         graphOriginalParent.insertBefore(graphContainer, inputTourDiv); 
         if (monGraphique) { monGraphique.destroy(); monGraphique = null; } 
     }
-    // Optionnel : si on veut reset la config de nouvelle partie ici
     resetConfigurationPartie();
 });
 function pause(ms) { return new Promise(resolve => { const timer = setTimeout(() => { currentStepSkipper = null; resolve(); }, ms); currentStepSkipper = () => { clearTimeout(timer); currentStepSkipper = null; resolve(); }; }); }
@@ -737,8 +771,9 @@ async function chargerJoueursRecents() { if (!currentUser) return; const userRef
 listeSuggestionsJoueurs.addEventListener('click', (e) => { const tag = e.target.closest('.joueur-suggestion-tag'); if (tag) { const nom = tag.dataset.nom; const couleur = tag.dataset.couleur; nomJoueurInput.value = nom; couleurJoueurInput.value = couleur; } });
 function supprimerAmi(uid) { if (!currentUser) return; if(confirm("Supprimer cet ami ?")) { db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).delete().then(() => chargerAmis()); } }
 async function sauvegarderAmi(uid, nouveauSurnom, nouvelleCouleur, ancienNom) { if (!currentUser) return; await db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).update({ surnom: nouveauSurnom, couleur: nouvelleCouleur }); const historyRef = db.collection('utilisateurs').doc(currentUser.uid).collection('historique'); const snapshot = await historyRef.get(); snapshot.forEach(doc => { let data = doc.data(); let modified = false; if (data.joueursComplets) { data.joueursComplets = data.joueursComplets.map(j => { if (j.uid === uid || (!j.uid && j.nom === ancienNom)) { j.nom = nouveauSurnom; j.couleur = nouvelleCouleur; if (!j.uid) j.uid = uid; modified = true; } return j; }); } if (data.classement) { data.classement = data.classement.map(j => { if (j.uid === uid || (!j.uid && j.nom === ancienNom)) { j.nom = nouveauSurnom; j.couleur = nouvelleCouleur; if (!j.uid) j.uid = uid; modified = true; } return j; }); } if (modified) { historyRef.doc(doc.id).update({ joueursComplets: data.joueursComplets, classement: data.classement }); } }); chargerAmis(); chargerHistoriqueParties(); }
-function chargerAmis() { if (!currentUser) return; db.collection('utilisateurs').doc(currentUser.uid).collection('amis').get().then(snapshot => { mesAmis = []; friendsListContainer.innerHTML = ""; selectAmiAjout.innerHTML = '<option value="">-- Choisir un ami --</option>'; if (snapshot.empty) { friendsListContainer.innerHTML = "<p>Pas d'amis.</p>"; return; } snapshot.forEach(doc => { const ami = doc.data(); mesAmis.push(ami); const pseudo = ami.surnom || ami.email; const couleur = ami.couleur || "#CCCCCC"; const div = document.createElement('div'); div.className = 'friend-item'; div.innerHTML = ` <div class="friend-view"> <div class="friend-info"> <span class="friend-color-swatch" style="background-color: ${couleur};"></span> <span>${pseudo}</span> <span class="friend-email">(${ami.email})</span> </div> <div class="friend-actions"> <button class="btn-icon btn-edit-friend"><i class="fa-solid fa-pencil"></i></button> <button class="btn-icon btn-delete-friend"><i class="fa-solid fa-trash"></i></button> </div> </div> <div class="friend-edit-form"> <input type="text" class="edit-surnom" value="${pseudo}"> <input type="color" class="edit-couleur" value="${couleur}"> <button class="btn-save-friend"><i class="fa-solid fa-check"></i></button> <button class="btn-cancel-friend"><i class="fa-solid fa-times"></i></button> </div> `; friendsListContainer.appendChild(div); const viewDiv = div.querySelector('.friend-view'); const editDiv = div.querySelector('.friend-edit-form'); viewDiv.querySelector('.btn-edit-friend').onclick = () => { viewDiv.style.display = 'none'; editDiv.style.display = 'flex'; }; viewDiv.querySelector('.btn-delete-friend').onclick = () => supprimerAmi(ami.uid); editDiv.querySelector('.btn-cancel-friend').onclick = () => { editDiv.style.display = 'none'; viewDiv.style.display = 'flex'; }; editDiv.querySelector('.btn-save-friend').onclick = () => { sauvegarderAmi(ami.uid, editDiv.querySelector('.edit-surnom').value, editDiv.querySelector('.edit-couleur').value, pseudo); }; const opt = document.createElement('option'); opt.value = ami.uid; opt.text = pseudo; opt.dataset.couleur = couleur; selectAmiAjout.appendChild(opt); }); }); }
+// ... La fonction chargerAmis est déjà définie plus haut ... 
 async function chargerHistoriqueParties() { if (!currentUser) return; const userRef = db.collection('utilisateurs').doc(currentUser.uid); historyGridJeux.innerHTML = "Chargement..."; try { const querySnapshot = await userRef.collection('historique').orderBy('date', 'desc').get(); allHistoryData = []; querySnapshot.forEach(doc => { let data = doc.data(); data.id = doc.id; allHistoryData.push(data); }); if (allHistoryData.length === 0) { historyGridJeux.innerHTML = "<p>Aucun historique.</p>"; return; } const partiesParJeu = {}; allHistoryData.forEach(partie => { const nomJeu = partie.nomJeu || "Parties"; partiesParJeu[nomJeu] = (partiesParJeu[nomJeu] || 0) + 1; }); historyGridJeux.innerHTML = ""; Object.keys(partiesParJeu).sort().forEach(nomJeu => { const nb = partiesParJeu[nomJeu]; const div = document.createElement('div'); div.className = 'history-game-square'; div.dataset.nomJeu = nomJeu; div.innerHTML = `${nomJeu}<span>${nb} partie${nb>1?'s':''}</span>`; historyGridJeux.appendChild(div); }); afficherStatsGlobales(); } catch (err) { console.error(err); historyGridJeux.innerHTML = "<p>Erreur.</p>"; } }
+function afficherStatsGlobales() { if (allHistoryData.length === 0) return; const partiesParJeu = {}; allHistoryData.forEach(p => { const n = p.nomJeu || "Parties"; partiesParJeu[n] = (partiesParJeu[n]||0)+1; }); const freqTries = Object.entries(partiesParJeu).sort((a,b)=>b[1]-a[1]).slice(0,3); statsJeuxFrequenceListe.innerHTML = freqTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join(''); const compteJoueurs = {}; allHistoryData.forEach(p => { (p.joueursComplets || p.classement).forEach(j => { compteJoueurs[j.nom] = (compteJoueurs[j.nom]||0)+1; }); }); const joueursTries = Object.entries(compteJoueurs).sort((a,b)=>b[1]-a[1]).slice(0,3); statsJoueursPodiumListe.innerHTML = joueursTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join(''); const statsPerf = {}; allHistoryData.forEach(partie => { const nom = partie.nomJeu || "Parties"; const totalJ = partie.classement.length; if(totalJ <= 1) return; if(!statsPerf[nom]) statsPerf[nom] = { sumPct: 0, count: 0 }; let moi = partie.classement.find(j => j.uid === currentUser.uid); if(!moi && monProfilLocal.nom) moi = partie.classement.find(j => j.nom === monProfilLocal.nom); if(moi) { const pct = (totalJ - moi.rang) / (totalJ - 1); statsPerf[nom].sumPct += pct; statsPerf[nom].count++; } }); const perfTries = Object.entries(statsPerf).map(([n, d]) => ({ nom: n, avg: (d.count>0 ? (d.sumPct/d.count)*100 : 0) })).filter(x => x.avg > 0).sort((a,b) => b.avg - a.avg).slice(0,3); statsTopJeuxListe.innerHTML = perfTries.map(j => `<li>${j.nom} <span>(${j.avg.toFixed(0)}%)</span></li>`).join(''); }
 function afficherDetailsHistoriqueJeu(nomJeu) { historyDetailsTitle.textContent = `Historique : ${nomJeu}`; listeHistoriquePartiesDetails.innerHTML = ''; joueursSurGraphique = []; mettreAJourTagsGraphique(); const parties = allHistoryData.filter(p => (p.nomJeu||"Parties") === nomJeu).sort((a,b) => new Date(b.date)-new Date(a.date)); const joueursSet = new Set(); parties.forEach(p => p.classement.forEach(j => joueursSet.add(j.nom))); historyPlayerSelect.innerHTML = ''; joueursSet.forEach(nom => { const opt = document.createElement('option'); opt.value = nom; opt.text = nom; historyPlayerSelect.appendChild(opt); }); parties.forEach(p => { const d = new Date(p.date).toLocaleDateString(); const podium = p.classement.slice(0,3).map(j => `${j.rang}. ${j.nom} (${j.scoreTotal})`).join('  '); const div = document.createElement('div'); div.className = 'partie-historique'; div.innerHTML = `<div class="header-info"><span class="time-date">${d}</span><div class="action-buttons"><button class="voir-hist-btn" data-id="${p.id}">Voir</button><button class="supprimer-hist-btn" data-id="${p.id}">&times;</button></div></div><div class="podium-mini">${podium}</div>`; listeHistoriquePartiesDetails.appendChild(div); }); showPage('page-history-details'); }
 function mettreAJourTagsGraphique() { graphPlayersList.innerHTML = ''; joueursSurGraphique.forEach(nom => { const tag = document.createElement('span'); tag.className = 'graph-player-tag'; tag.innerHTML = `${nom} <button class="bouton-retirer">&times;</button>`; tag.querySelector('button').onclick = (e) => { e.stopPropagation(); joueursSurGraphique = joueursSurGraphique.filter(j => j !== nom); mettreAJourTagsGraphique(); const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); const parties = allHistoryData.filter(p => (p.nomJeu||"Parties") === nomJeu).sort((a,b)=>new Date(a.date)-new Date(b.date)); redessinerGraphiquePosition(parties); }; graphPlayersList.appendChild(tag); }); }
 function redessinerGraphiquePosition(parties) { if(monGraphiquePosition) monGraphiquePosition.destroy(); if(joueursSurGraphique.length === 0) return; const labels = parties.map((p,i) => `P${i+1}`); const datasets = joueursSurGraphique.map((nom, i) => { const data = parties.map(p => { const j = p.classement.find(x => x.nom === nom); if(!j) return null; const total = p.classement.length; return total > 1 ? ((total - j.rang)/(total-1))*100 : 100; }); return { label: nom, data, borderColor: COULEURS_GRAPH[i%COULEURS_GRAPH.length], fill: false, spanGaps: true }; }); monGraphiquePosition = new Chart(canvasGraphiquePosition, { type: 'line', data: { labels, datasets }, options: { scales: { y: { min: 0, max: 100, ticks: { callback: v => v+'%' } } } } }); }
