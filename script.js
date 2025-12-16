@@ -304,7 +304,7 @@ btnUpdatePassword.addEventListener('click', () => {
 });
 
 // =============================================================
-// 6. GESTION DES AMIS (CORRIGÉE)
+// 6. GESTION DES AMIS
 // =============================================================
 
 // Écouteur du bouton Ajouter Ami
@@ -339,7 +339,6 @@ function ajouterAmi(email, nickname, color) {
         const amiUid = amiDoc.uid;
         const amiEmail = amiDoc.email;
 
-        // Valeurs par défaut
         const finalNickname = nickname || amiDoc.pseudo || amiEmail.split('@')[0];
         const finalColor = color || amiDoc.couleur || genererCouleurAleatoire();
 
@@ -373,6 +372,7 @@ function supprimerAmi(uid) {
     } 
 }
 
+// CETTE FONCTION APPELE chargerHistoriqueParties, IL FAUT QU'ELLE SOIT DÉFINIE AVANT OU APRÈS, MAIS PRÉSENTE
 async function sauvegarderAmi(uid, nouveauSurnom, nouvelleCouleur, ancienNom) { 
     if (!currentUser) return; 
     await db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).update({ surnom: nouveauSurnom, couleur: nouvelleCouleur }); 
@@ -396,7 +396,7 @@ async function sauvegarderAmi(uid, nouveauSurnom, nouvelleCouleur, ancienNom) {
         if (modified) { historyRef.doc(doc.id).update({ joueursComplets: data.joueursComplets, classement: data.classement }); } 
     }); 
     chargerAmis(); 
-    chargerHistoriqueParties(); 
+    chargerHistoriqueParties(); // C'est ici que l'erreur se produisait si la fonction manquait
 }
 
 function chargerAmis() { 
@@ -445,7 +445,6 @@ function chargerAmis() {
         }); 
     }); 
 }
-
 // =============================================================
 // 7. LOGIQUE JEU - CONFIGURATION
 // =============================================================
