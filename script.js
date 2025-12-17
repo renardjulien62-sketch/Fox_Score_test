@@ -16,6 +16,7 @@ let mesAmis = [];
 // Profil local
 let monProfilLocal = { nom: '', couleur: '#e67e22', uid: null };
 
+// Variables Graphique Historique (Analyse)
 let monGraphiquePosition = null;
 let joueursSurGraphique = [];
 const COULEURS_GRAPH = ['#36A2EB', '#FF6384', '#4BC0C0', '#FFCE56', '#9966FF', '#FF9F40'];
@@ -41,6 +42,7 @@ const inputIdMap = {
 const auth = firebase.auth(); 
 let partieIdActuelle = null; 
 let currentUser = null;
+// NOTE : La variable 'db' est déjà déclarée dans le fichier HTML
 
 // =============================================================
 // 2. SÉLECTION DES ÉLÉMENTS HTML (DOM)
@@ -118,7 +120,7 @@ const revealScore = document.getElementById('reveal-score');
 const skipAllBtn = document.getElementById('skip-all-btn');
 const retourAccueilBtn = document.getElementById('retour-accueil-btn');
 
-// Stats
+// Stats & Graphique Analyse
 const historyPlayerSelect = document.getElementById('history-player-select');
 const canvasGraphiquePosition = document.getElementById('graphique-position-details');
 const statsTopJeuxListe = document.querySelector('#stats-top-jeux ol');
@@ -126,6 +128,7 @@ const statsJeuxFrequenceListe = document.querySelector('#stats-jeux-frequence ol
 const statsJoueursPodiumListe = document.querySelector('#stats-joueurs-podium ol');
 const addPlayerToGraphBtn = document.getElementById('add-player-to-graph-btn');
 const graphPlayersList = document.getElementById('graph-players-list');
+const filterCommonGamesInput = document.getElementById('filter-common-games-checkbox'); // NOUVEAU
 
 // Amis & Profil
 const friendEmailInput = document.getElementById('friend-email-input');
@@ -226,19 +229,16 @@ auth.onAuthStateChanged(user => {
                 creerProfilPublic(user, user.email.split('@')[0], genererCouleurAleatoire());
             }
             
-            // Mise à jour variables globales
             monProfilLocal.nom = pseudoAffiche;
             monProfilLocal.couleur = couleurAffiche;
             monProfilLocal.uid = user.uid;
 
-            // Mise à jour UI
             navUserProfile.textContent = pseudoAffiche;
             profilePseudoInput.value = pseudoAffiche;
             profileColorInput.value = couleurAffiche;
 
-            // Initialiser listes
             resetConfigurationPartie();
-            chargerAmis(); // Appelé ICI pour avoir le profil prêt
+            chargerAmis(); 
         });
 
         chargerListeParties();
@@ -265,6 +265,7 @@ btnUpdateProfile.addEventListener('click', () => {
     const newPseudo = profilePseudoInput.value.trim();
     const newColor = profileColorInput.value;
     if(!newPseudo) { alert("Le pseudo ne peut pas être vide"); return; }
+    
     const userRef = db.collection('utilisateurs').doc(currentUser.uid);
     const publicRef = db.collection('users_public').doc(currentUser.uid);
 
@@ -280,7 +281,6 @@ btnUpdateProfile.addEventListener('click', () => {
         profileMsg.classList.remove('cache');
         setTimeout(() => profileMsg.classList.add('cache'), 3000);
         
-        // Refresh UI qui dépend du profil
         resetConfigurationPartie();
         chargerAmis();
     });
@@ -307,31 +307,42 @@ btnUpdatePassword.addEventListener('click', () => {
 // 6. GESTION DES AMIS
 // =============================================================
 
-// Écouteur du bouton Ajouter Ami
-btnAddFriend.addEventListener('click', () => {
-    const email = friendEmailInput.value.trim();
-    const nickname = friendNicknameInput.value.trim();
-    const color = friendColorInput.value;
+// 1. Écouteur du bouton "Ajouter"
+if (btnAddFriend) {
+    btnAddFriend.addEventListener('click', () => {
+        if (!friendEmailInput || !friendNicknameInput || !friendColorInput) return;
 
-    if (email) {
-        ajouterAmi(email, nickname, color);
-    } else {
-        friendAddMsg.textContent = "Veuillez entrer un email.";
-        friendAddMsg.style.color = "red";
-        friendAddMsg.classList.remove('cache');
-    }
-});
+        const email = friendEmailInput.value.trim();
+        const nickname = friendNicknameInput.value.trim();
+        const color = friendColorInput.value;
 
+        if (email) {
+            ajouterAmi(email, nickname, color);
+        } else {
+            if (friendAddMsg) {
+                friendAddMsg.textContent = "Veuillez entrer une adresse email.";
+                friendAddMsg.style.color = "red";
+                friendAddMsg.classList.remove('cache');
+            }
+        }
+    });
+}
+
+// 2. Fonction Ajouter Ami
 function ajouterAmi(email, nickname, color) {
-    friendAddMsg.classList.remove('cache');
-    friendAddMsg.textContent = "Recherche en cours...";
-    friendAddMsg.style.color = "blue";
+    if (friendAddMsg) {
+        friendAddMsg.classList.remove('cache');
+        friendAddMsg.textContent = "Recherche en cours...";
+        friendAddMsg.style.color = "blue";
+    }
 
     db.collection('users_public').where('email', '==', email).get()
     .then(snapshot => {
         if (snapshot.empty) {
-            friendAddMsg.textContent = "Aucun compte trouvé avec cet email.";
-            friendAddMsg.style.color = "red";
+            if (friendAddMsg) {
+                friendAddMsg.textContent = "Introuvable. Cet ami s'est-il déjà connecté ?";
+                friendAddMsg.style.color = "red";
+            }
             return;
         }
         
@@ -340,7 +351,7 @@ function ajouterAmi(email, nickname, color) {
         const amiEmail = amiDoc.email;
 
         const finalNickname = nickname || amiDoc.pseudo || amiEmail.split('@')[0];
-        const finalColor = color || amiDoc.couleur || genererCouleurAleatoire();
+        const finalColor = color || amiDoc.couleur || (typeof genererCouleurAleatoire === 'function' ? genererCouleurAleatoire() : '#cccccc');
 
         db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(amiUid).set({
             email: amiEmail,
@@ -349,65 +360,94 @@ function ajouterAmi(email, nickname, color) {
             couleur: finalColor,
             dateAjout: new Date().toISOString()
         }).then(() => {
-            friendAddMsg.textContent = "Ami ajouté !";
-            friendAddMsg.style.color = "green";
+            if (friendAddMsg) {
+                friendAddMsg.textContent = "Ami ajouté avec succès !";
+                friendAddMsg.style.color = "green";
+            }
+            
             friendEmailInput.value = "";
             friendNicknameInput.value = "";
+            
             chargerAmis();
             
-            setTimeout(() => { friendAddMsg.classList.add('cache'); }, 3000);
+            setTimeout(() => { if(friendAddMsg) friendAddMsg.classList.add('cache'); }, 3000);
         });
     })
     .catch(err => {
-        console.error("Erreur ajout ami", err);
-        friendAddMsg.textContent = "Erreur lors de l'ajout.";
-        friendAddMsg.style.color = "red";
+        console.error("Erreur ajout ami :", err);
+        if (friendAddMsg) {
+            friendAddMsg.textContent = "Erreur technique.";
+            friendAddMsg.style.color = "red";
+        }
     });
 }
 
+// 3. Fonction Supprimer Ami
 function supprimerAmi(uid) { 
     if (!currentUser) return; 
-    if(confirm("Supprimer cet ami ?")) { 
-        db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).delete().then(() => chargerAmis()); 
+    if(confirm("Voulez-vous vraiment supprimer cet ami ?")) { 
+        db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).delete()
+        .then(() => chargerAmis())
+        .catch(err => console.error(err));
     } 
 }
 
-// CETTE FONCTION APPELE chargerHistoriqueParties, IL FAUT QU'ELLE SOIT DÉFINIE AVANT OU APRÈS, MAIS PRÉSENTE
+// 4. Fonction Sauvegarder Ami (Modification)
 async function sauvegarderAmi(uid, nouveauSurnom, nouvelleCouleur, ancienNom) { 
     if (!currentUser) return; 
-    await db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).update({ surnom: nouveauSurnom, couleur: nouvelleCouleur }); 
+    
+    // Mise à jour de la fiche ami
+    await db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(uid).update({ 
+        surnom: nouveauSurnom, 
+        couleur: nouvelleCouleur 
+    }); 
+    
+    // Mise à jour rétroactive de l'historique
     const historyRef = db.collection('utilisateurs').doc(currentUser.uid).collection('historique'); 
     const snapshot = await historyRef.get(); 
+    
     snapshot.forEach(doc => { 
         let data = doc.data(); 
         let modified = false; 
+        
         if (data.joueursComplets) { 
             data.joueursComplets = data.joueursComplets.map(j => { 
-                if (j.uid === uid || (!j.uid && j.nom === ancienNom)) { j.nom = nouveauSurnom; j.couleur = nouvelleCouleur; if (!j.uid) j.uid = uid; modified = true; } 
+                if (j.uid === uid || (!j.uid && j.nom === ancienNom)) { 
+                    j.nom = nouveauSurnom; j.couleur = nouvelleCouleur; if (!j.uid) j.uid = uid; modified = true; 
+                } 
                 return j; 
             }); 
         } 
         if (data.classement) { 
             data.classement = data.classement.map(j => { 
-                if (j.uid === uid || (!j.uid && j.nom === ancienNom)) { j.nom = nouveauSurnom; j.couleur = nouvelleCouleur; if (!j.uid) j.uid = uid; modified = true; } 
+                if (j.uid === uid || (!j.uid && j.nom === ancienNom)) { 
+                    j.nom = nouveauSurnom; j.couleur = nouvelleCouleur; if (!j.uid) j.uid = uid; modified = true; 
+                } 
                 return j; 
             }); 
         } 
-        if (modified) { historyRef.doc(doc.id).update({ joueursComplets: data.joueursComplets, classement: data.classement }); } 
+        if (modified) { 
+            historyRef.doc(doc.id).update({ joueursComplets: data.joueursComplets, classement: data.classement }); 
+        } 
     }); 
+    
     chargerAmis(); 
-    chargerHistoriqueParties(); // C'est ici que l'erreur se produisait si la fonction manquait
+    if (typeof chargerHistoriqueParties === 'function') {
+        chargerHistoriqueParties();
+    }
 }
 
+// 5. Fonction Charger la liste des amis
 function chargerAmis() { 
     if (!currentUser) return; 
+    
     db.collection('utilisateurs').doc(currentUser.uid).collection('amis').get().then(snapshot => { 
         mesAmis = []; 
-        friendsListContainer.innerHTML = ""; 
-        selectAmiAjout.innerHTML = '<option value="">-- Choisir un profil --</option>'; 
         
-        // 1. AJOUTER "MOI"
-        if (monProfilLocal.nom) {
+        if(friendsListContainer) friendsListContainer.innerHTML = ""; 
+        if(selectAmiAjout) selectAmiAjout.innerHTML = '<option value="">-- Choisir un profil --</option>'; 
+        
+        if (monProfilLocal.nom && selectAmiAjout) {
             const optMe = document.createElement('option');
             optMe.value = currentUser.uid;
             optMe.text = `👤 Moi (${monProfilLocal.nom})`; 
@@ -415,36 +455,63 @@ function chargerAmis() {
             selectAmiAjout.appendChild(optMe);
         }
 
-        if (snapshot.empty) { friendsListContainer.innerHTML = "<p>Pas d'amis.</p>"; return; } 
+        if (snapshot.empty) { 
+            if(friendsListContainer) friendsListContainer.innerHTML = "<p>Pas encore d'amis ajoutés.</p>"; 
+            return; 
+        } 
         
-        // 2. AJOUTER AMIS
         snapshot.forEach(doc => { 
             const ami = doc.data(); 
             mesAmis.push(ami); 
+            
             const pseudo = ami.surnom || ami.email; 
             const couleur = ami.couleur || "#CCCCCC"; 
+            
             const div = document.createElement('div'); 
             div.className = 'friend-item'; 
             div.innerHTML = ` 
                 <div class="friend-view"> 
-                    <div class="friend-info"> <span class="friend-color-swatch" style="background-color: ${couleur};"></span> <span>${pseudo}</span> <span class="friend-email">(${ami.email})</span> </div> 
-                    <div class="friend-actions"> <button class="btn-icon btn-edit-friend"><i class="fa-solid fa-pencil"></i></button> <button class="btn-icon btn-delete-friend"><i class="fa-solid fa-trash"></i></button> </div> 
+                    <div class="friend-info"> 
+                        <span class="friend-color-swatch" style="background-color: ${couleur};"></span> 
+                        <span>${pseudo}</span> 
+                        <span class="friend-email">(${ami.email})</span> 
+                    </div> 
+                    <div class="friend-actions"> 
+                        <button class="btn-icon btn-edit-friend"><i class="fa-solid fa-pencil"></i></button> 
+                        <button class="btn-icon btn-delete-friend"><i class="fa-solid fa-trash"></i></button> 
+                    </div> 
                 </div> 
-                <div class="friend-edit-form"> <input type="text" class="edit-surnom" value="${pseudo}"> <input type="color" class="edit-couleur" value="${couleur}"> <button class="btn-save-friend"><i class="fa-solid fa-check"></i></button> <button class="btn-cancel-friend"><i class="fa-solid fa-times"></i></button> </div> 
+                <div class="friend-edit-form"> 
+                    <input type="text" class="edit-surnom" value="${pseudo}"> 
+                    <input type="color" class="edit-couleur" value="${couleur}"> 
+                    <button class="btn-save-friend"><i class="fa-solid fa-check"></i></button> 
+                    <button class="btn-cancel-friend"><i class="fa-solid fa-times"></i></button> 
+                </div> 
             `; 
-            friendsListContainer.appendChild(div); 
-            const viewDiv = div.querySelector('.friend-view'); const editDiv = div.querySelector('.friend-edit-form'); 
+            
+            if(friendsListContainer) friendsListContainer.appendChild(div); 
+            
+            const viewDiv = div.querySelector('.friend-view'); 
+            const editDiv = div.querySelector('.friend-edit-form'); 
+            
             viewDiv.querySelector('.btn-edit-friend').onclick = () => { viewDiv.style.display = 'none'; editDiv.style.display = 'flex'; }; 
             viewDiv.querySelector('.btn-delete-friend').onclick = () => supprimerAmi(ami.uid); 
             editDiv.querySelector('.btn-cancel-friend').onclick = () => { editDiv.style.display = 'none'; viewDiv.style.display = 'flex'; }; 
-            editDiv.querySelector('.btn-save-friend').onclick = () => { sauvegarderAmi(ami.uid, editDiv.querySelector('.edit-surnom').value, editDiv.querySelector('.edit-couleur').value, pseudo); }; 
+            editDiv.querySelector('.btn-save-friend').onclick = () => { 
+                sauvegarderAmi(ami.uid, editDiv.querySelector('.edit-surnom').value, editDiv.querySelector('.edit-couleur').value, pseudo); 
+            }; 
             
-            const opt = document.createElement('option'); 
-            opt.value = ami.uid; opt.text = pseudo; opt.dataset.couleur = couleur; 
-            selectAmiAjout.appendChild(opt); 
+            if (selectAmiAjout) {
+                const opt = document.createElement('option'); 
+                opt.value = ami.uid; 
+                opt.text = pseudo; 
+                opt.dataset.couleur = couleur; 
+                selectAmiAjout.appendChild(opt); 
+            }
         }); 
     }); 
 }
+
 // =============================================================
 // 7. LOGIQUE JEU - CONFIGURATION
 // =============================================================
@@ -663,15 +730,15 @@ listePartiesSauvegardees.addEventListener('click', e => {
                 mettreAJourScoresAffichage(); 
                 creerGraphique(); 
                 if (!scoresSecrets && monGraphique) { 
-                     monGraphique.data.labels = ['Manche 0'];
-                     joueurs.forEach((j, idx) => {
-                         let cum = 0;
-                         const data = [0];
-                         j.scoresTour.forEach(s => { cum += s; data.push(cum); });
-                         if(monGraphique.data.datasets[idx]) monGraphique.data.datasets[idx].data = data;
-                     });
-                     for(let i=1; i<=mancheActuelle; i++) if(monGraphique.data.labels.length <= i) monGraphique.data.labels.push(`Manche ${i}`);
-                     monGraphique.update(); 
+                      monGraphique.data.labels = ['Manche 0'];
+                      joueurs.forEach((j, idx) => {
+                          let cum = 0;
+                          const data = [0];
+                          j.scoresTour.forEach(s => { cum += s; data.push(cum); });
+                          if(monGraphique.data.datasets[idx]) monGraphique.data.datasets[idx].data = data;
+                      });
+                      for(let i=1; i<=mancheActuelle; i++) if(monGraphique.data.labels.length <= i) monGraphique.data.labels.push(`Manche ${i}`);
+                      monGraphique.update(); 
                 } 
                 mettreAJourCompteurs(); 
             } 
@@ -786,6 +853,7 @@ async function chargerHistoriqueParties() {
             allHistoryData.push(data); 
         }); 
         
+        // Tri JS
         allHistoryData.sort((a,b) => new Date(b.date) - new Date(a.date));
 
         if (allHistoryData.length === 0) { 
@@ -805,7 +873,7 @@ async function chargerHistoriqueParties() {
             const div = document.createElement('div'); 
             div.className = 'history-game-square'; 
             div.dataset.nomJeu = nomJeu; 
-            div.innerHTML = `${nomJeu}<span>${nb} partie${nb>1?'s':''}</span>`; 
+            div.innerHTML = `<h3>${nomJeu}</h3><span>${nb} partie${nb>1?'s':''}</span>`; 
             historyGridJeux.appendChild(div); 
         }); 
         
@@ -856,19 +924,235 @@ function afficherStatsGlobales() {
     });
 
     // 2. Fréquence
-    const partiesParJeu = {};
-    allHistoryData.forEach(p => { const n = p.nomJeu || "Parties"; partiesParJeu[n] = (partiesParJeu[n]||0)+1; });
-    const freqTries = Object.entries(partiesParJeu).sort((a,b)=>b[1]-a[1]).slice(0,3);
-    statsJeuxFrequenceListe.innerHTML = freqTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join('');
+    const partiesParJeu = {}; 
+    allHistoryData.forEach(p => { const n = p.nomJeu || "Parties"; partiesParJeu[n] = (partiesParJeu[n]||0)+1; }); 
+    const freqTries = Object.entries(partiesParJeu).sort((a,b)=>b[1]-a[1]).slice(0,3); 
+    statsJeuxFrequenceListe.innerHTML = freqTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join(''); 
 
     // 3. Top Joueurs
-    const compteJoueurs = {};
-    allHistoryData.forEach(p => { (p.joueursComplets || p.classement).forEach(j => { compteJoueurs[j.nom] = (compteJoueurs[j.nom]||0)+1; }); });
-    const joueursTries = Object.entries(compteJoueurs).sort((a,b)=>b[1]-a[1]).slice(0,3);
-    statsJoueursPodiumListe.innerHTML = joueursTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join('');
+    const compteJoueurs = {}; 
+    allHistoryData.forEach(p => { (p.joueursComplets || p.classement).forEach(j => { compteJoueurs[j.nom] = (compteJoueurs[j.nom]||0)+1; }); }); 
+    const joueursTries = Object.entries(compteJoueurs).sort((a,b)=>b[1]-a[1]).slice(0,3); 
+    statsJoueursPodiumListe.innerHTML = joueursTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join(''); 
 }
 
-// --- RESTE (Helpers, Reveal, Graphiques) ---
+// =============================================================
+// 10. FONCTIONS HELPERS, REVEAL & GRAPHIQUES (DONT DETAILS)
+// =============================================================
+
+function afficherDetailsHistoriqueJeu(nomJeu) {
+    showPage('page-history-details');
+    historyDetailsTitle.textContent = `Historique : ${nomJeu}`;
+
+    // Réinitialiser la case à cocher
+    if(filterCommonGamesInput) filterCommonGamesInput.checked = false;
+
+    // Filtrer les données pour ce jeu (Global pour cette vue)
+    const partiesDuJeu = allHistoryData.filter(p => (p.nomJeu || "Parties") === nomJeu);
+
+    // Remplir le select pour le graphique
+    const joueursUniques = new Set();
+    partiesDuJeu.forEach(p => {
+        if (p.classement) p.classement.forEach(j => joueursUniques.add(j.nom));
+        if (p.joueursComplets) p.joueursComplets.forEach(j => joueursUniques.add(j.nom));
+    });
+    
+    historyPlayerSelect.innerHTML = '<option value="">-- Ajouter au graphique --</option>';
+    [...joueursUniques].sort().forEach(nom => {
+        const opt = document.createElement('option');
+        opt.value = nom;
+        opt.textContent = nom;
+        historyPlayerSelect.appendChild(opt);
+    });
+
+    // Reset du graphique et des tags
+    joueursSurGraphique = []; 
+    if (monProfilLocal.nom && joueursUniques.has(monProfilLocal.nom)) {
+        joueursSurGraphique.push(monProfilLocal.nom);
+    }
+    
+    // Initialisation du graphique avec les filtres
+    actualiserGraphiqueAvecFiltres();
+
+    // Afficher la liste des parties (Toutes par défaut)
+    listeHistoriquePartiesDetails.innerHTML = '';
+    
+    if (partiesDuJeu.length === 0) {
+        listeHistoriquePartiesDetails.innerHTML = "<p>Aucune donnée trouvée.</p>";
+        return;
+    }
+
+    partiesDuJeu.forEach(partie => {
+        const div = document.createElement('div');
+        div.className = 'partie-historique';
+        
+        const dateObj = new Date(partie.date);
+        const dateStr = dateObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+        const heureStr = dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+        let podiumHTML = '';
+        if (partie.classement) {
+            const top3 = partie.classement.filter(j => j.rang <= 3).sort((a,b) => a.rang - b.rang);
+            top3.forEach(j => {
+                let medaille = '';
+                if(j.rang === 1) medaille = '🥇';
+                if(j.rang === 2) medaille = '🥈';
+                if(j.rang === 3) medaille = '🥉';
+                podiumHTML += `<span style="margin-right:10px;"><span class="podium-medaille-small">${medaille}</span> ${j.nom} : <strong>${j.scoreTotal}</strong></span>`;
+            });
+        }
+
+        div.innerHTML = `
+            <div class="header-info">
+                <span class="time-date"><i class="far fa-calendar-alt"></i> ${dateStr} à ${heureStr}</span>
+                <div class="action-buttons">
+                    <button class="voir-hist-btn" data-id="${partie.id}"><i class="fas fa-eye"></i> Voir</button>
+                    <button class="supprimer-hist-btn" data-id="${partie.id}"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+            <div class="podium-mini">
+                ${podiumHTML}
+            </div>
+            <div style="margin-top:5px; font-size:0.85em; color:#666;">
+                ${partie.manches} manches jouées • ${partie.lowScoreWins ? 'Le plus petit gagne' : 'Le plus grand gagne'}
+            </div>
+        `;
+        listeHistoriquePartiesDetails.appendChild(div);
+    });
+}
+
+function actualiserGraphiqueAvecFiltres() {
+    mettreAJourTagsGraphique();
+
+    // 1. Récupérer le nom du jeu actuel depuis le titre
+    const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', '');
+    let parties = allHistoryData.filter(p => (p.nomJeu || "Parties") === nomJeu);
+
+    // 2. Appliquer le filtre "Parties Communes" si coché
+    if (filterCommonGamesInput && filterCommonGamesInput.checked && joueursSurGraphique.length > 0) {
+        parties = parties.filter(partie => {
+            const nomsDansLaPartie = partie.classement.map(j => j.nom);
+            // Vérifie si TOUS les joueurs sélectionnés sont présents dans cette partie
+            return joueursSurGraphique.every(joueurSelectionne => nomsDansLaPartie.includes(joueurSelectionne));
+        });
+    }
+
+    // 3. Trier par date et dessiner
+    parties.sort((a, b) => new Date(a.date) - new Date(b.date));
+    redessinerGraphiquePosition(parties);
+}
+
+// Écouteur sur la case à cocher
+if(filterCommonGamesInput) {
+    filterCommonGamesInput.addEventListener('change', actualiserGraphiqueAvecFiltres);
+}
+
+function mettreAJourTagsGraphique() {
+    graphPlayersList.innerHTML = '';
+    joueursSurGraphique.forEach((nom, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'graph-player-tag';
+        const couleur = COULEURS_GRAPH[index % COULEURS_GRAPH.length];
+        tag.style.borderLeft = `4px solid ${couleur}`;
+        
+        tag.innerHTML = `${nom} <span class="bouton-retirer" data-nom="${nom}">&times;</span>`;
+        
+        tag.querySelector('.bouton-retirer').addEventListener('click', (e) => {
+            e.stopPropagation(); 
+            joueursSurGraphique = joueursSurGraphique.filter(n => n !== nom);
+            actualiserGraphiqueAvecFiltres(); // APPEL DE LA NOUVELLE FONCTION
+        });
+        
+        graphPlayersList.appendChild(tag);
+    });
+}
+
+function redessinerGraphiquePosition(partiesTrieesParDate) {
+    if (joueursSurGraphique.length === 0 || partiesTrieesParDate.length === 0) {
+        if(monGraphiquePosition) {
+            monGraphiquePosition.destroy();
+            monGraphiquePosition = null;
+        }
+        return;
+    }
+
+    const labels = partiesTrieesParDate.map(p => {
+        const d = new Date(p.date);
+        return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    });
+
+    const datasets = joueursSurGraphique.map((nomJoueur, index) => {
+        const data = partiesTrieesParDate.map(partie => {
+            const joueurData = partie.classement.find(j => j.nom === nomJoueur);
+            
+            if (!joueurData) return null; 
+
+            const rang = joueurData.rang;
+            const nbJoueurs = partie.classement.length;
+
+            if (nbJoueurs <= 1) return 100; 
+            
+            const performance = ((nbJoueurs - rang) / (nbJoueurs - 1)) * 100;
+            return Math.round(performance); 
+        });
+
+        const couleur = COULEURS_GRAPH[index % COULEURS_GRAPH.length];
+
+        return {
+            label: nomJoueur,
+            data: data,
+            borderColor: couleur,
+            backgroundColor: couleur,
+            tension: 0.3,
+            spanGaps: true 
+        };
+    });
+
+    if (monGraphiquePosition) monGraphiquePosition.destroy();
+
+    monGraphiquePosition = new Chart(canvasGraphiquePosition, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false, 
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 105, 
+                    title: { display: true, text: 'Performance (%)' },
+                    ticks: { 
+                        callback: function(value) { return value + "%" } 
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Modif Bouton Ajouter Joueur Graphique pour appeler la nouvelle fonction
+addPlayerToGraphBtn.addEventListener('click', () => { 
+    const nom = historyPlayerSelect.value; 
+    if(nom && !joueursSurGraphique.includes(nom)) { 
+        joueursSurGraphique.push(nom); 
+        actualiserGraphiqueAvecFiltres(); // APPEL DE LA NOUVELLE FONCTION
+    } 
+});
+
+// --- AUTRES HELPERS ---
+
 function genererChampsSaisie() { saisiePointsDiv.innerHTML = ''; joueurs.forEach((joueur, index) => { const div = document.createElement('div'); div.className = 'saisie-item'; div.innerHTML = ` <label for="score-${index}"> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} : </label> <input type="number" id="score-${index}" value="0"> `; saisiePointsDiv.appendChild(div); }); }
 function mettreAJourScoresAffichage() { scoreAffichageDiv.innerHTML = ''; let listePourAffichage = []; if (!scoresSecrets) { let joueursTries = [...joueurs].sort((a, b) => { return lowScoreWins ? a.scoreTotal - b.scoreTotal : b.scoreTotal - a.scoreTotal; }); listePourAffichage = calculerRangs(joueursTries); } else { listePourAffichage = joueurs; } let html = '<table class="classement-table">'; html += '<thead><tr><th>#</th><th>Joueur</th><th>Total</th></tr></thead>'; html += '<tbody>'; listePourAffichage.forEach((joueur) => { const rangAffichage = joueur.rang && !scoresSecrets ? joueur.rang : '-'; html += ` <tr> <td>${rangAffichage}</td> <td> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} </td> <td class="score-total">${scoresSecrets ? '???' : `${joueur.scoreTotal} pts`}</td> </tr> `; }); html += '</tbody></table>'; scoreAffichageDiv.innerHTML = html; }
 function mettreAJourCompteurs() { manchesPasseesAffichage.textContent = mancheActuelle; let restantesManches = Infinity; let afficherManchesRestantes = false; if (conditionsArret.manche_total.active) { const totalManches = conditionsArret.manche_total.mancheCible; restantesManches = Math.max(0, totalManches - mancheActuelle); afficherManchesRestantes = true; } if (conditionsArret.manche_restante.active) { const mancheCible = conditionsArret.manche_restante.mancheCible; const restantesDynamiques = Math.max(0, mancheCible - mancheActuelle); restantesManches = Math.min(restantesManches, restantesDynamiques); afficherManchesRestantes = true; } if (afficherManchesRestantes) { manchesRestantesAffichage.textContent = restantesManches; manchesRestantesAffichageDiv.classList.remove('cache'); } else { manchesRestantesAffichageDiv.classList.add('cache'); } let pointsMinRestants = Infinity; let afficherPointsRestants = false; if (conditionsArret.score_limite.active) { const scoreMax = Math.max(...joueurs.map(j => j.scoreTotal)); const restantsAbsolu = Math.max(0, conditionsArret.score_limite.valeur - scoreMax); pointsMinRestants = Math.min(pointsMinRestants, restantsAbsolu); afficherPointsRestants = true; } if (conditionsArret.score_relatif.active) { joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; const restantsRelatif = Math.max(0, limiteCible - joueur.scoreTotal); pointsMinRestants = Math.min(pointsMinRestants, restantsRelatif); }); afficherPointsRestants = true; } if (afficherPointsRestants) { pointsRestantsAffichage.textContent = pointsMinRestants; pointsRestantsAffichageDiv.classList.remove('cache'); } else { pointsRestantsAffichageDiv.classList.add('cache'); } }
