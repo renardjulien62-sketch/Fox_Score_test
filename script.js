@@ -711,14 +711,20 @@ listePartiesSauvegardees.addEventListener('click', e => {
 
                 showPage('page-score'); 
                 
-                // --- CORRECTION BUG GRAPHIQUE SECRET ---
-                const graphContainer = document.querySelector('.graphique-container');
-                if (scoresSecrets) {
-                    graphContainer.classList.add('cache');
-                } else {
-                    graphContainer.classList.remove('cache');
+                // --- CORRECTION BUG GRAPHIQUE SECRET (Force Brute Style) ---
+                const canvasElement = document.getElementById('graphique-scores');
+                const graphContainer = canvasElement ? canvasElement.parentElement : null;
+                
+                if (graphContainer) {
+                    if (scoresSecrets) {
+                        graphContainer.classList.add('cache');
+                        graphContainer.style.display = 'none'; // Sécurité supplémentaire
+                    } else {
+                        graphContainer.classList.remove('cache');
+                        graphContainer.style.display = 'block';
+                    }
                 }
-                // ---------------------------------------
+                // ------------------------------------------------------------
 
                 validerTourBouton.disabled = false; 
                 arreterMaintenantBouton.disabled = false; 
@@ -815,7 +821,10 @@ async function terminerPartie() {
     await sauvegarderHistoriquePartie(classementFinal); 
     
     const graphContainer = document.querySelector('.graphique-container'); 
-    if (graphContainer) graphContainer.classList.remove('cache'); 
+    if (graphContainer) {
+        graphContainer.classList.remove('cache'); 
+        graphContainer.style.display = 'block'; // On force l'affichage
+    }
     
     if (scoresSecrets) { 
         scoresSecrets = false; 
@@ -1170,8 +1179,46 @@ function verifierConditionsArret() { if (validerTourBouton.disabled) return; let
 function construirePodiumFinal() { currentStepSkipper = null; const podiumMap = { 1: document.getElementById('podium-1'), 2: document.getElementById('podium-2'), 3: document.getElementById('podium-3') }; Object.values(podiumMap).forEach(el => el.classList.remove('cache')); const premier = classementFinal.filter(j => j.rang === 1); const deuxieme = classementFinal.filter(j => j.rang === 2); const troisieme = classementFinal.filter(j => j.rang === 3); const remplirPlace = (element, joueursPlace) => { if (joueursPlace.length > 0) { const joueurRef = joueursPlace[0]; const noms = joueursPlace.map(j => j.nom).join(' & '); element.querySelector('.podium-nom').textContent = noms; element.querySelector('.podium-score').textContent = `${joueurRef.scoreTotal} pts`; element.style.borderColor = joueurRef.couleur; element.style.boxShadow = `0 0 15px ${joueurRef.couleur}80`; } else { element.classList.add('cache'); } }; remplirPlace(podiumMap[1], premier); remplirPlace(podiumMap[2], deuxieme); remplirPlace(podiumMap[3], troisieme); const autresListe = document.getElementById('autres-joueurs-liste'); autresListe.innerHTML = ''; const autresJoueurs = classementFinal.filter(j => j.rang > 3); if(autresJoueurs.length === 0) { document.getElementById('autres-joueurs').classList.add('cache'); } else { document.getElementById('autres-joueurs').classList.remove('cache'); autresJoueurs.sort((a, b) => a.rang - b.rang); autresJoueurs.forEach((joueur) => { const li = document.createElement('li'); li.innerHTML = ` <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> <strong>${joueur.rang}. ${joueur.nom}</strong> (${joueur.scoreTotal} pts) `; autresListe.appendChild(li); }); } const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); if (monGraphique) { monGraphique.resize(); } } }
 function majContenuReveal(rang, joueur, estExAequoPrecedent) { let rangTexte = `${rang}ème Place`; if (estExAequoPrecedent) { rangTexte = `Ex æquo ${rang}ème Place`; } if (rang === 3) rangTexte = `🥉 ${estExAequoPrecedent ? 'Ex æquo ' : ''}3ème Place`; if (rang === 1) rangTexte = `🥇 GAGNANT ${estExAequoPrecedent ? 'Ex æquo ' : ''}!`; revealRang.textContent = rangTexte; revealNom.textContent = joueur.nom; revealNom.style.color = joueur.couleur; revealScore.textContent = `${joueur.scoreTotal} points`; revealContent.classList.remove('is-revealed'); }
 async function demarrerSequenceReveal() { showPage('page-score'); revealEcran.classList.remove('cache'); let joueursAReveler = []; joueursAReveler.push(...classementFinal.filter(j => j.rang > 2).reverse()); joueursAReveler.push(...classementFinal.filter(j => j.rang === 1)); let rangPrecedent = null; for (const joueur of joueursAReveler) { if (sequenceForceStop) return; const rang = joueur.rang; const estExAequo = (rang === rangPrecedent); majContenuReveal(rang, joueur, estExAequo); revealContent.classList.add('slide-in-from-left'); await attendreFinAnimation(revealContent); revealContent.classList.remove('slide-in-from-left'); if (sequenceForceStop) return; await pause(1500); if (sequenceForceStop) return; revealContent.classList.add('shake-reveal'); await attendreFinAnimation(revealContent); revealContent.classList.remove('shake-reveal'); revealContent.classList.add('is-revealed'); if (sequenceForceStop) return; await pause(2500); if (sequenceForceStop) return; if (joueur !== joueursAReveler[joueursAReveler.length - 1]) { revealContent.classList.add('slide-out-to-right'); await attendreFinAnimation(revealContent); revealContent.classList.remove('slide-out-to-right', 'is-revealed'); } rangPrecedent = rang; } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); }
-function creerGraphique() { if (monGraphique) { monGraphique.destroy(); } const datasets = joueurs.map((joueur, index) => ({ label: joueur.nom, data: [0], borderColor: joueur.couleur, backgroundColor: joueur.couleur + '33', fill: false, tension: 0.1 })); monGraphique = new Chart(canvasGraphique, { type: 'line', data: { labels: ['Manche 0'], datasets: datasets }, options: { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } }, scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } } }); }
-function mettreAJourGraphique() { if (!monGraphique) { return; } const labelManche = 'Manche ' + mancheActuelle; if (!monGraphique.data.labels.includes(labelManche)) { monGraphique.data.labels.push(labelManche); } joueurs.forEach((joueur, index) => { if(monGraphique.data.datasets[index]) { if (monGraphique.data.datasets[index].data.length <= mancheActuelle) { monGraphique.data.datasets[index].data.push(joueur.scoreTotal); } else { monGraphique.data.datasets[index].data[mancheActuelle] = joueur.scoreTotal; } } }); monGraphique.update(); }
+function creerGraphique() { 
+    if (monGraphique) { monGraphique.destroy(); } 
+    
+    // --- SECURITE ANTI-SPOIL ---
+    const isSecret = scoresSecrets; 
+
+    const datasets = joueurs.map((joueur, index) => ({ 
+        label: joueur.nom, 
+        // Si secret, on ne met PAS les données
+        data: isSecret ? [] : [0], 
+        borderColor: joueur.couleur, 
+        backgroundColor: joueur.couleur + '33', 
+        fill: false, 
+        tension: 0.1 
+    })); 
+    
+    monGraphique = new Chart(canvasGraphique, { 
+        type: 'line', 
+        data: { labels: ['Manche 0'], datasets: datasets }, 
+        options: { 
+            responsive: true, 
+            plugins: { legend: { position: 'top' }, title: { display: false } }, 
+            scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } 
+        } 
+    }); 
+}
+function mettreAJourGraphique() { 
+    if (!monGraphique) { return; } 
+    // Si secret, on n'ajoute rien au graphique
+    if (scoresSecrets) return;
+
+    const labelManche = 'Manche ' + mancheActuelle; 
+    if (!monGraphique.data.labels.includes(labelManche)) { monGraphique.data.labels.push(labelManche); } 
+    joueurs.forEach((joueur, index) => { 
+        if(monGraphique.data.datasets[index]) { 
+            if (monGraphique.data.datasets[index].data.length <= mancheActuelle) { monGraphique.data.datasets[index].data.push(joueur.scoreTotal); } else { monGraphique.data.datasets[index].data[mancheActuelle] = joueur.scoreTotal; } 
+        } 
+    }); 
+    monGraphique.update(); 
+}
 function recreerGraphiqueFinal() { const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { if (!graphPlaceholder.contains(graphContainer)) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); } } if (monGraphique) { monGraphique.destroy(); } const datasets = joueurs.map((joueur, index) => ({ label: joueur.nom, data: [0], borderColor: joueur.couleur, backgroundColor: joueur.couleur + '33', fill: false, tension: 0.1 })); monGraphique = new Chart(canvasGraphique, { type: 'line', data: { labels: ['Manche 0'], datasets: datasets }, options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } } }); let scoreCumules = new Array(joueurs.length).fill(0); for (let i = 0; i < mancheActuelle; i++) { if(monGraphique.data.labels.length <= i + 1) { monGraphique.data.labels.push(`Manche ${i + 1}`); } joueurs.forEach((joueur, index) => { const scoreDeCeTour = (joueur.scoresTour && joueur.scoresTour[i]) ? joueur.scoresTour[i] : 0; scoreCumules[index] += scoreDeCeTour; if(monGraphique.data.datasets[index]) { monGraphique.data.datasets[index].data[i+1] = scoreCumules[index]; } }); } monGraphique.update(); monGraphique.resize(); }
 function mettreAJourConditionsArret() { for (const key in conditionsArret) { conditionsArret[key].active = false; } document.querySelectorAll('.condition-checkbox:checked').forEach(checkbox => { const type = checkbox.dataset.type; conditionsArret[type].active = true; const inputId = inputIdMap[type]; const inputElement = document.getElementById(inputId); const valeur = parseInt(inputElement.value, 10) || 0; if (type === 'score_limite') { conditionsArret.score_limite.valeur = valeur; } else if (type === 'score_relatif') { conditionsArret[type].valeur = valeur; joueurs.forEach(j => { j.scoreRelatifPivot = j.scoreTotal; }); } else if (type === 'manche_total') { conditionsArret.manche_total.mancheCible = valeur; } else if (type === 'manche_restante') { conditionsArret.manche_restante.mancheCible = mancheActuelle + valeur; } }); }
 conditionCheckboxes.forEach(checkbox => { checkbox.addEventListener('change', (e) => { const type = e.target.dataset.type; const inputId = inputIdMap[type]; const input = document.getElementById(inputId); if (input) { input.disabled = !checkbox.checked; } mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
