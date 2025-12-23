@@ -128,7 +128,7 @@ const statsJeuxFrequenceListe = document.querySelector('#stats-jeux-frequence ol
 const statsJoueursPodiumListe = document.querySelector('#stats-joueurs-podium ol');
 const addPlayerToGraphBtn = document.getElementById('add-player-to-graph-btn');
 const graphPlayersList = document.getElementById('graph-players-list');
-const filterCommonGamesInput = document.getElementById('filter-common-games-checkbox'); // NOUVEAU
+const filterCommonGamesInput = document.getElementById('filter-common-games-checkbox'); 
 
 // Amis & Profil
 const friendEmailInput = document.getElementById('friend-email-input');
@@ -710,6 +710,16 @@ listePartiesSauvegardees.addEventListener('click', e => {
                 nomJeuActuel = etatPartie.nomJeuActuel || "Partie";
 
                 showPage('page-score'); 
+                
+                // --- CORRECTION BUG GRAPHIQUE SECRET ---
+                const graphContainer = document.querySelector('.graphique-container');
+                if (scoresSecrets) {
+                    graphContainer.classList.add('cache');
+                } else {
+                    graphContainer.classList.remove('cache');
+                }
+                // ---------------------------------------
+
                 validerTourBouton.disabled = false; 
                 arreterMaintenantBouton.disabled = false; 
                 
@@ -1060,7 +1070,7 @@ function mettreAJourTagsGraphique() {
         tag.querySelector('.bouton-retirer').addEventListener('click', (e) => {
             e.stopPropagation(); 
             joueursSurGraphique = joueursSurGraphique.filter(n => n !== nom);
-            actualiserGraphiqueAvecFiltres(); // APPEL DE LA NOUVELLE FONCTION
+            actualiserGraphiqueAvecFiltres(); 
         });
         
         graphPlayersList.appendChild(tag);
@@ -1147,7 +1157,7 @@ addPlayerToGraphBtn.addEventListener('click', () => {
     const nom = historyPlayerSelect.value; 
     if(nom && !joueursSurGraphique.includes(nom)) { 
         joueursSurGraphique.push(nom); 
-        actualiserGraphiqueAvecFiltres(); // APPEL DE LA NOUVELLE FONCTION
+        actualiserGraphiqueAvecFiltres(); 
     } 
 });
 
