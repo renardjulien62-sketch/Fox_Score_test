@@ -90,6 +90,7 @@ const annulerTourBouton = document.getElementById('annuler-tour');
 const sauvegarderBtn = document.getElementById('sauvegarder-partie');
 const arreterMaintenantBouton = document.getElementById('arreter-maintenant');
 const saveFeedback = document.getElementById('save-feedback');
+const btnToggleGraph = document.getElementById('btn-toggle-graph'); 
 
 // Zones Affichage
 const suggestionsJoueursDiv = document.getElementById('suggestions-joueurs');
@@ -328,7 +329,7 @@ if (btnAddFriend) {
     });
 }
 
-// 2. Fonction Ajouter Ami
+// 2. Fonction Ajouter Ami (MODIFIÉE POUR RÉCIPROCITÉ)
 function ajouterAmi(email, nickname, color) {
     if (friendAddMsg) {
         friendAddMsg.classList.remove('cache');
@@ -350,18 +351,35 @@ function ajouterAmi(email, nickname, color) {
         const amiUid = amiDoc.uid;
         const amiEmail = amiDoc.email;
 
+        // Préparation des données pour MOI (J'ajoute l'ami)
         const finalNickname = nickname || amiDoc.pseudo || amiEmail.split('@')[0];
         const finalColor = color || amiDoc.couleur || (typeof genererCouleurAleatoire === 'function' ? genererCouleurAleatoire() : '#cccccc');
 
-        db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(amiUid).set({
+        const ajoutPourMoi = db.collection('utilisateurs').doc(currentUser.uid).collection('amis').doc(amiUid).set({
             email: amiEmail,
             uid: amiUid,
             surnom: finalNickname,
             couleur: finalColor,
             dateAjout: new Date().toISOString()
-        }).then(() => {
+        });
+
+        // Préparation des données pour L'AMI (Il m'ajoute automatiquement)
+        // On utilise mon profil local pour définir comment il me verra
+        const monSurnomPourLui = monProfilLocal.nom || currentUser.email.split('@')[0];
+        const maCouleurPourLui = monProfilLocal.couleur || '#e67e22';
+
+        const ajoutPourLui = db.collection('utilisateurs').doc(amiUid).collection('amis').doc(currentUser.uid).set({
+            email: currentUser.email,
+            uid: currentUser.uid,
+            surnom: monSurnomPourLui, // Il me verra avec mon pseudo actuel
+            couleur: maCouleurPourLui, // Il me verra avec ma couleur actuelle
+            dateAjout: new Date().toISOString()
+        });
+
+        // Exécution des deux ajouts en parallèle
+        Promise.all([ajoutPourMoi, ajoutPourLui]).then(() => {
             if (friendAddMsg) {
-                friendAddMsg.textContent = "Ami ajouté avec succès !";
+                friendAddMsg.textContent = "Ami ajouté avec succès (et réciproquement) !";
                 friendAddMsg.style.color = "green";
             }
             
@@ -609,7 +627,17 @@ demarrerBouton.addEventListener('click', () => {
     const graphOriginalParent = document.getElementById('page-score').querySelector('.score-gauche');
     const inputTourDiv = document.getElementById('page-score').querySelector('.input-tour');
     if (graphContainer && graphOriginalParent && inputTourDiv) { graphOriginalParent.insertBefore(graphContainer, inputTourDiv); }
-    if (scoresSecrets) graphContainer.classList.add('cache'); else graphContainer.classList.remove('cache');
+    
+    // GESTION AFFICHAGE INITIAL (ET BOUTON)
+    if (scoresSecrets) {
+        graphContainer.classList.add('cache');
+        graphContainer.style.display = 'none'; // Force style
+        if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Afficher le Graphique";
+    } else {
+        graphContainer.classList.remove('cache');
+        graphContainer.style.display = 'block';
+        if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Masquer le Graphique";
+    }
     
     mettreAJourConditionsArret(); 
     showPage('page-score');
@@ -620,6 +648,26 @@ demarrerBouton.addEventListener('click', () => {
     
     sauvegarderPartieEnCours(true);
 });
+
+// LOGIQUE BOUTON TOGGLE GRAPH
+if(btnToggleGraph) {
+    btnToggleGraph.addEventListener('click', () => {
+        const graphContainer = document.querySelector('.graphique-container');
+        if (graphContainer) {
+            if (graphContainer.classList.contains('cache')) {
+                // On affiche
+                graphContainer.classList.remove('cache');
+                graphContainer.style.display = 'block';
+                btnToggleGraph.textContent = "👁️ Masquer le Graphique";
+            } else {
+                // On masque
+                graphContainer.classList.add('cache');
+                graphContainer.style.display = 'none';
+                btnToggleGraph.textContent = "👁️ Afficher le Graphique";
+            }
+        }
+    });
+}
 
 // =============================================================
 // 8. IN-GAME LOGIC
@@ -711,20 +759,22 @@ listePartiesSauvegardees.addEventListener('click', e => {
 
                 showPage('page-score'); 
                 
-                // --- CORRECTION BUG GRAPHIQUE SECRET (Force Brute Style) ---
+                // --- GESTION AFFICHAGE GRAPHIQUE (CHARGE) ---
                 const canvasElement = document.getElementById('graphique-scores');
                 const graphContainer = canvasElement ? canvasElement.parentElement : null;
                 
                 if (graphContainer) {
                     if (scoresSecrets) {
                         graphContainer.classList.add('cache');
-                        graphContainer.style.display = 'none'; // Sécurité supplémentaire
+                        graphContainer.style.display = 'none'; // Force Masquage
+                        if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Afficher le Graphique";
                     } else {
                         graphContainer.classList.remove('cache');
                         graphContainer.style.display = 'block';
+                        if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Masquer le Graphique";
                     }
                 }
-                // ------------------------------------------------------------
+                // --------------------------------------------
 
                 validerTourBouton.disabled = false; 
                 arreterMaintenantBouton.disabled = false; 
@@ -745,7 +795,10 @@ listePartiesSauvegardees.addEventListener('click', e => {
                 genererChampsSaisie(); 
                 mettreAJourScoresAffichage(); 
                 creerGraphique(); 
-                if (!scoresSecrets && monGraphique) { 
+                // Même si secret, on peuple les données (car caché par CSS display:none)
+                // mais on peut aussi les laisser vide pour double sécurité si besoin.
+                // Ici on laisse ChartJS les dessiner mais le conteneur est caché.
+                if (monGraphique) { 
                       monGraphique.data.labels = ['Manche 0'];
                       joueurs.forEach((j, idx) => {
                           let cum = 0;
@@ -824,6 +877,7 @@ async function terminerPartie() {
     if (graphContainer) {
         graphContainer.classList.remove('cache'); 
         graphContainer.style.display = 'block'; // On force l'affichage
+        if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Masquer le Graphique";
     }
     
     if (scoresSecrets) { 
