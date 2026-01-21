@@ -351,7 +351,6 @@ function ajouterAmi(email, nickname, color) {
         const amiUid = amiDoc.uid;
         const amiEmail = amiDoc.email;
 
-        // Préparation des données pour MOI (J'ajoute l'ami)
         const finalNickname = nickname || amiDoc.pseudo || amiEmail.split('@')[0];
         const finalColor = color || amiDoc.couleur || (typeof genererCouleurAleatoire === 'function' ? genererCouleurAleatoire() : '#cccccc');
 
@@ -363,20 +362,17 @@ function ajouterAmi(email, nickname, color) {
             dateAjout: new Date().toISOString()
         });
 
-        // Préparation des données pour L'AMI (Il m'ajoute automatiquement)
-        // On utilise mon profil local pour définir comment il me verra
         const monSurnomPourLui = monProfilLocal.nom || currentUser.email.split('@')[0];
         const maCouleurPourLui = monProfilLocal.couleur || '#e67e22';
 
         const ajoutPourLui = db.collection('utilisateurs').doc(amiUid).collection('amis').doc(currentUser.uid).set({
             email: currentUser.email,
             uid: currentUser.uid,
-            surnom: monSurnomPourLui, // Il me verra avec mon pseudo actuel
-            couleur: maCouleurPourLui, // Il me verra avec ma couleur actuelle
+            surnom: monSurnomPourLui, 
+            couleur: maCouleurPourLui, 
             dateAjout: new Date().toISOString()
         });
 
-        // Exécution des deux ajouts en parallèle
         Promise.all([ajoutPourMoi, ajoutPourLui]).then(() => {
             if (friendAddMsg) {
                 friendAddMsg.textContent = "Ami ajouté avec succès (et réciproquement) !";
@@ -878,6 +874,8 @@ async function terminerPartie() {
     await sauvegarderHistoriquePartie(classementFinal); 
     
     const graphContainer = document.querySelector('.graphique-container'); 
+    
+    // --- CORRECTION FIN DE PARTIE : ON AFFICHE LE GRAPHIQUE ET ON RECALCULE ---
     if (graphContainer) {
         graphContainer.classList.remove('cache'); 
         graphContainer.style.display = 'block'; // On force l'affichage
@@ -888,9 +886,14 @@ async function terminerPartie() {
         scoresSecrets = false; 
         mettreAJourScoresAffichage(); 
         alert("Scores révélés !"); 
+        
+        // On force la reconstruction du graphique avec les vraies données
+        recreerGraphiqueFinal(); 
+        
         setTimeout(demarrerSequenceReveal, 100); 
     } else { 
         mettreAJourScoresAffichage(); 
+        recreerGraphiqueFinal(); 
         demarrerSequenceReveal(); 
     } 
 }
@@ -1303,11 +1306,13 @@ function recreerGraphiqueFinal() {
         let scoreCumul = 0;
         const dataPoints = [0]; // Manche 0 = 0 pts
         
-        // On parcourt toutes les manches jouées
-        for(let i = 0; i < mancheActuelle; i++) {
-            const pointsTour = (joueur.scoresTour && joueur.scoresTour[i] !== undefined) ? joueur.scoresTour[i] : 0;
-            scoreCumul += pointsTour;
-            dataPoints.push(scoreCumul);
+        // On parcourt toutes les manches jouées via l'array scoresTour directement
+        // C'est plus sûr que d'utiliser mancheActuelle comme borne
+        if (joueur.scoresTour && joueur.scoresTour.length > 0) {
+            for(let i = 0; i < joueur.scoresTour.length; i++) {
+                scoreCumul += joueur.scoresTour[i];
+                dataPoints.push(scoreCumul);
+            }
         }
 
         return { 
@@ -1321,8 +1326,14 @@ function recreerGraphiqueFinal() {
     });
 
     // On prépare les labels (Manche 0, Manche 1...)
+    // On trouve le joueur qui a le plus de manches pour définir l'axe X
+    let maxManches = 0;
+    joueurs.forEach(j => {
+        if(j.scoresTour && j.scoresTour.length > maxManches) maxManches = j.scoresTour.length;
+    });
+
     const labels = ['Manche 0'];
-    for(let i = 1; i <= mancheActuelle; i++) {
+    for(let i = 1; i <= maxManches; i++) {
         labels.push(`Manche ${i}`);
     }
 
