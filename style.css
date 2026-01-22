@@ -331,27 +331,87 @@ button:disabled { background-color: #cbd5e0; cursor: not-allowed; transform: non
 .add-player-group { align-items: stretch; flex-direction: column; }
 .player-input-row, .player-color-row { display: flex; align-items: center; gap: 10px; width: 100%; }
 
-#liste-joueurs-conf { display: flex; flex-wrap: wrap; gap: 10px; min-height: 40px; }
-.joueur-tag {
+/* =========================================
+   5. LISTE DES JOUEURS & TAGS (CORRECTION HITBOX)
+   ========================================= */
+
+/* Conteneurs de liste */
+#liste-joueurs-conf, #graph-players-list { 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 10px; 
+    min-height: 40px; 
+    align-items: center;
+}
+
+/* Style des étiquettes (Tags) */
+.joueur-tag, .graph-player-tag {
     display: inline-flex;
     align-items: center;
+    justify-content: space-between; /* Assure l'espacement */
     background-color: #fff;
     border: 1px solid #ddd;
     color: #333;
-    padding: 8px 15px;
+    padding: 5px 5px 5px 12px; /* Padding ajusté pour laisser place au bouton */
     border-radius: 30px;
     font-weight: bold;
+    font-size: 0.95em;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    user-select: none; /* Empêche de sélectionner le texte en cliquant */
+    transition: transform 0.1s;
 }
+
+/* Pastille de couleur */
 .joueur-couleur-swatch {
-    width: 18px; height: 18px; border-radius: 50%; margin-right: 10px;
-    border: 2px solid white; box-shadow: 0 0 3px rgba(0,0,0,0.3);
+    width: 14px; 
+    height: 14px; 
+    border-radius: 50%; 
+    margin-right: 8px; 
+    border: 2px solid white; 
+    box-shadow: 0 0 3px rgba(0,0,0,0.3);
+    flex-shrink: 0; /* Empêche l'écrasement */
 }
+
+/* --- LE BOUTON QUI POSAIT PROBLÈME --- */
 .bouton-retirer {
-    background: none; border: none; color: #aaa; font-size: 1.4em;
-    margin-left: 8px; padding: 0; line-height: 1;
+    /* On force une taille fixe pour la zone de clic */
+    width: 26px;
+    height: 26px;
+    
+    /* On le transforme en boite flexible pour centrer le X parfaitement */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Reset des styles par défaut */
+    background-color: rgba(0,0,0,0.05); /* Léger fond gris pour voir la zone */
+    border: none;
+    color: #666;
+    
+    /* Positionnement */
+    margin-left: 10px;
+    padding: 0; /* Pas de padding interne qui décale */
+    border-radius: 50%; /* Rond parfait */
+    
+    font-size: 1.2em;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.2s;
 }
-.bouton-retirer:hover { color: #e74c3c; }
+
+/* Effet au survol : devient rouge */
+.bouton-retirer:hover {
+    background-color: #dc3545;
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Style spécifique pour le graph (bordure gauche colorée) */
+.graph-player-tag {
+    border-left-width: 5px !important; /* Force la bordure couleur */
+    padding-left: 10px;
+}
 
 #liste-suggestions-joueurs { display: flex; flex-wrap: wrap; gap: 8px; }
 .joueur-suggestion-tag {
