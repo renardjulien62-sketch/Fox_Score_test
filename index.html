@@ -256,13 +256,27 @@
                         </div>
                     </div>
                     <div class="score-droite">
+                        <div class="input-group" style="margin-bottom: 15px; background: #fff3cd; border-color: #ffeeba;">
+                            <label style="font-weight:bold; color:#856404;">Jeu en cours :</label>
+                            <div style="display:flex; width:100%; gap:5px;">
+                                <input type="text" id="input-edit-nom-jeu" style="flex:1;">
+                                <button id="btn-update-nom-jeu" class="bouton-simple" style="margin:0;">💾</button>
+                            </div>
+                        </div>
+
                         <h3>Conditions d'Arrêt :</h3>
                         <div class="fin-partie-options input-group">
                             <label><input type="checkbox" class="condition-checkbox" id="check-score-limite" data-type="score_limite"> Arrêter quand un joueur atteint <input type="number" id="score-limite" min="1" value="100" disabled> points (Total).</label><br>
                             <label><input type="checkbox" class="condition-checkbox" id="check-score-relatif" data-type="score_relatif"> Arrêter quand un joueur a marqué <input type="number" id="score-relatif" min="1" value="50" disabled> points de plus que maintenant.</label><br>
                             <label><input type="checkbox" class="condition-checkbox" id="check-manche-total" data-type="manche_total"> Arrêter après un total de <input type="number" id="nb-manches-total" min="1" value="10" disabled> manches.</label><br>
-                            <label><input type="checkbox" class="condition-checkbox" id="check-manche-restante" data-type="manche_restante"> Arrêter dans <input type="number" id="nb-manches-restantes" min="1" value="3" disabled> manches restantes.</label>
+                            <label><input type="checkbox" class="condition-checkbox" id="check-manche-restante" data-type="manche_restante"> Arrêter dans <input type="number" id="nb-manches-restantes" min="1" value="3" disabled> manches restantes.</label><br>
+                            
+                            <label style="color: #d35400; font-weight: bold;">
+                                <input type="checkbox" class="condition-checkbox" id="check-temps-limite" data-type="temps_limite"> 
+                                Arrêter après <input type="number" id="temps-limite" min="1" value="30" disabled> minutes de jeu.
+                            </label>
                         </div>
+                        
                         <div style="margin-top: 15px;">
                             <button id="sauvegarder-partie" style="background-color: #28a745; width: 100%;">Sauvegarder Manuellement</button>
                             <p id="save-feedback" style="color: green; text-align: center; height: 20px; font-size: 0.9em; margin: 0;"></p>
