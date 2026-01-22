@@ -1336,29 +1336,6 @@ conditionCheckboxes.forEach(checkbox => { checkbox.addEventListener('change', (e
 nomJoueurInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { ajouterBouton.click(); } });
 revealEcran.addEventListener('click', (e) => { if (e.target.closest('#skip-all-btn') || e.target.closest('#reveal-content')) { return; } if (currentStepSkipper) { currentStepSkipper(); } });
 skipAllBtn.addEventListener('click', () => { sequenceForceStop = true; if (currentStepSkipper) { currentStepSkipper(); } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); });
-retourAccueilBtn.addEventListener('click', () => { 
-    showPage('page-ongoing-games'); 
-    const graphContainer = document.querySelector('.graphique-container'); 
-    const graphOriginalParent = document.getElementById('page-score').querySelector('.score-gauche'); 
-    const inputTourDiv = document.getElementById('page-score').querySelector('.input-tour'); 
-    if (graphContainer && graphOriginalParent && inputTourDiv) { 
-        graphOriginalParent.insertBefore(graphContainer, inputTourDiv); 
-        if (monGraphique) { monGraphique.destroy(); monGraphique = null; } 
-    }
-    resetConfigurationPartie();
-});
-function pause(ms) { return new Promise(resolve => { const timer = setTimeout(() => { currentStepSkipper = null; resolve(); }, ms); currentStepSkipper = () => { clearTimeout(timer); currentStepSkipper = null; resolve(); }; }); }
-function attendreFinAnimation(element) { return new Promise(resolve => { const onAnimEnd = () => { currentStepSkipper = null; resolve(); }; element.addEventListener('animationend', onAnimEnd, { once: true }); currentStepSkipper = () => { element.removeEventListener('animationend', onAnimEnd); currentStepSkipper = null; resolve(); }; }); }
-function calculerRangs(joueursTries) { let rangActuel = 0; let scorePrecedent = null; let nbExAequo = 1; joueursTries.forEach((joueur, index) => { if (joueur.scoreTotal !== scorePrecedent) { rangActuel += nbExAequo; nbExAequo = 1; } else { nbExAequo++; } joueur.rang = rangActuel; scorePrecedent = joueur.scoreTotal; }); return joueursTries; }
-function retirerJoueur(index) { joueurs.splice(index, 1); mettreAJourListeJoueurs(); verifierPeutDemarrer(); }
-function mettreAJourDatalistJeux() { datalistJeux.innerHTML = ''; categoriesJeuxConnues.forEach(nomJeu => { const option = document.createElement('option'); option.value = nomJeu; datalistJeux.appendChild(option); }); }
-async function chargerCategoriesConnues() { if (!currentUser) return; const userRef = db.collection('utilisateurs').doc(currentUser.uid); try { const querySnapshot = await userRef.collection('historique').get(); const nomsJeux = new Set(); querySnapshot.forEach(doc => { const nomJeu = doc.data().nomJeu; if (nomJeu) { nomsJeux.add(nomJeu); } }); categoriesJeuxConnues = [...nomsJeux].sort(); mettreAJourDatalistJeux(); } catch (err) { console.error("Erreur chargement catégories: ", err); } }
-function afficherSuggestionsJoueurs() { listeSuggestionsJoueurs.innerHTML = ''; if (joueursRecents.length === 0) { suggestionsJoueursDiv.classList.add('cache'); return; } suggestionsJoueursDiv.classList.remove('cache'); joueursRecents.sort((a,b) => a.nom.localeCompare(b.nom)).forEach(joueur => { const tag = document.createElement('div'); tag.className = 'joueur-suggestion-tag'; tag.dataset.nom = joueur.nom; tag.dataset.couleur = joueur.couleur; tag.innerHTML = ` <span class="joueur-couleur-swatch" style="background-color: ${joueur.couleur};"></span> <span>${joueur.nom}</span> `; listeSuggestionsJoueurs.appendChild(tag); }); }
-async function chargerJoueursRecents() { if (!currentUser) return; const userRef = db.collection('utilisateurs').doc(currentUser.uid); try { const querySnapshot = await userRef.collection('joueursRecents').get(); joueursRecents = []; querySnapshot.forEach(doc => { joueursRecents.push(doc.data()); }); afficherSuggestionsJoueurs(); } catch (err) { console.error("Erreur chargement joueurs récents: ", err); } }
-listeSuggestionsJoueurs.addEventListener('click', (e) => { const tag = e.target.closest('.joueur-suggestion-tag'); if (tag) { const nom = tag.dataset.nom; const couleur = tag.dataset.couleur; nomJoueurInput.value = nom; couleurJoueurInput.value = couleur; } });
-addPlayerToGraphBtn.addEventListener('click', () => { const nom = historyPlayerSelect.value; if(nom && !joueursSurGraphique.includes(nom)) { joueursSurGraphique.push(nom); mettreAJourTagsGraphique(); const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); const parties = allHistoryData.filter(p => (p.nomJeu||"Parties") === nomJeu).sort((a,b)=>new Date(a.date)-new Date(b.date)); redessinerGraphiquePosition(parties); } });
-historyGridJeux.addEventListener('click', (e) => { const square = e.target.closest('.history-game-square'); if (square) afficherDetailsHistoriqueJeu(square.dataset.nomJeu); });
-historyBackBtn.addEventListener('click', () => { showPage('page-history-grid'); joueursSurGraphique = []; mettreAJourTagsGraphique(); if(monGraphiquePosition) { monGraphiquePosition.destroy(); monGraphiquePosition=null; } });
 
 // CLICK LISTENER HISTORIQUE AVEC MODIF NAVIGATION ET RENOMMAGE
 listeHistoriquePartiesDetails.addEventListener('click', async (e) => { 
