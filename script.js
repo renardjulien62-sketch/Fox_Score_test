@@ -28,24 +28,23 @@ let conditionsArret = {
     score_limite: { active: false, valeur: 0 },
     score_relatif: { active: false, valeur: 0 },
     manche_total: { active: false, mancheCible: 0 },
-    manche_restante: { active: false, mancheCible: 0 },
-    temps_limite: { active: false, valeur: 0 } // NOUVEAU : Valeur en minutes
+    manche_restante: { active: false, mancheCible: 0 }
 };
 
 const inputIdMap = {
     'score_limite': 'score-limite',
     'score_relatif': 'score-relatif',
     'manche_total': 'nb-manches-total',
-    'manche_restante': 'nb-manches-restantes',
-    'temps_limite': 'temps-limite' // NOUVEAU
+    'manche_restante': 'nb-manches-restantes'
 };
 
 // MINUTEUR
 let timerInterval = null;
 let tempsJeuSecondes = 0;
 
-// Navigation
+// Navigation & Renommage
 let estModeHistorique = false;
+let idPartieARenommer = null;
 
 // Init Firebase
 const auth = firebase.auth(); 
@@ -101,10 +100,6 @@ const arreterMaintenantBouton = document.getElementById('arreter-maintenant');
 const saveFeedback = document.getElementById('save-feedback');
 const btnToggleGraph = document.getElementById('btn-toggle-graph'); 
 
-// NOUVEAU : Inputs modification nom jeu
-const inputEditNomJeu = document.getElementById('input-edit-nom-jeu');
-const btnUpdateNomJeu = document.getElementById('btn-update-nom-jeu');
-
 // Zones Affichage
 const suggestionsJoueursDiv = document.getElementById('suggestions-joueurs');
 const listeSuggestionsJoueurs = document.getElementById('liste-suggestions-joueurs');
@@ -126,7 +121,6 @@ const scoreLimiteInput = document.getElementById('score-limite');
 const scoreRelatifInput = document.getElementById('score-relatif');
 const nbManchesTotalInput = document.getElementById('nb-manches-total');
 const nbManchesRestantesInput = document.getElementById('nb-manches-restantes');
-const tempsLimiteInput = document.getElementById('temps-limite'); // NOUVEAU
 const revealEcran = document.getElementById('reveal-ecran');
 const revealContent = document.getElementById('reveal-content');
 const revealRang = document.getElementById('reveal-rang');
@@ -145,6 +139,12 @@ const statsJoueursPodiumListe = document.querySelector('#stats-joueurs-podium ol
 const addPlayerToGraphBtn = document.getElementById('add-player-to-graph-btn');
 const graphPlayersList = document.getElementById('graph-players-list');
 const filterCommonGamesInput = document.getElementById('filter-common-games-checkbox'); 
+
+// Modal Rename
+const modalRename = document.getElementById('modal-rename');
+const inputRenameGame = document.getElementById('input-rename-game');
+const btnConfirmRename = document.getElementById('btn-confirm-rename');
+const btnCancelRename = document.getElementById('btn-cancel-rename');
 
 // Amis & Profil
 const friendEmailInput = document.getElementById('friend-email-input');
@@ -181,6 +181,7 @@ navLinks.forEach(link => {
         e.preventDefault();
         showPage(link.dataset.page);
         
+        // Si on quitte la page de score, on arrête le timer visuellement
         if (link.dataset.page !== 'page-score') {
             stopTimer();
         }
@@ -665,9 +666,6 @@ demarrerBouton.addEventListener('click', () => {
     mettreAJourCompteurs(); 
     creerGraphique();
     
-    // Initialiser le champ de modification du nom
-    if(inputEditNomJeu) inputEditNomJeu.value = nomJeuActuel;
-
     sauvegarderPartieEnCours(true);
 });
 
@@ -681,6 +679,7 @@ if(btnToggleGraph) {
                 graphContainer.classList.remove('cache');
                 graphContainer.style.display = 'block';
                 btnToggleGraph.textContent = "👁️ Masquer le Graphique";
+                // CORRECTION : Forcer le redimensionnement pour éviter l'effet "écrasé"
                 if(monGraphique) {
                     monGraphique.resize();
                 }
@@ -694,22 +693,8 @@ if(btnToggleGraph) {
     });
 }
 
-// LOGIQUE MODIFICATION NOM JEU
-if(btnUpdateNomJeu) {
-    btnUpdateNomJeu.addEventListener('click', () => {
-        const nouveauNom = inputEditNomJeu.value.trim();
-        if(nouveauNom) {
-            nomJeuActuel = nouveauNom;
-            sauvegarderPartieEnCours();
-            saveFeedback.textContent = "Nom mis à jour !";
-            saveFeedback.classList.remove('cache');
-            setTimeout(() => { saveFeedback.textContent = ""; }, 2000);
-        }
-    });
-}
-
 // =============================================================
-// 8. MINUTEUR
+// 8. MINUTEUR 
 // =============================================================
 function startTimer() {
     stopTimer(); 
@@ -829,14 +814,13 @@ listePartiesSauvegardees.addEventListener('click', e => {
 
                 showPage('page-score'); 
                 
-                // --- GESTION AFFICHAGE GRAPHIQUE (CHARGE) ---
                 const canvasElement = document.getElementById('graphique-scores');
                 const graphContainer = canvasElement ? canvasElement.parentElement : null;
                 
                 if (graphContainer) {
                     if (scoresSecrets) {
                         graphContainer.classList.add('cache');
-                        graphContainer.style.display = 'none'; // Force Masquage
+                        graphContainer.style.display = 'none'; 
                         if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Afficher le Graphique";
                     } else {
                         graphContainer.classList.remove('cache');
@@ -844,12 +828,10 @@ listePartiesSauvegardees.addEventListener('click', e => {
                         if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Masquer le Graphique";
                     }
                 }
-                // --------------------------------------------
 
                 validerTourBouton.disabled = false; 
                 arreterMaintenantBouton.disabled = false; 
                 
-                // RESET CHECKBOXES
                 document.querySelectorAll('.condition-checkbox').forEach(cb => { 
                     const type = cb.dataset.type; 
                     if (conditionsArret[type]) { 
@@ -857,21 +839,15 @@ listePartiesSauvegardees.addEventListener('click', e => {
                         const input = document.getElementById(inputIdMap[type]); 
                         if(input) { 
                             input.disabled = !cb.checked; 
-                            // Cas spéciaux pour les inputs
-                            if (type === 'temps_limite') input.value = conditionsArret[type].valeur || 30; // Valeur
-                            else if (type === 'manche_total') input.value = conditionsArret[type].mancheCible; 
+                            if (type === 'manche_total') input.value = conditionsArret[type].mancheCible; 
                             else if(type.includes('score')) input.value = conditionsArret[type].valeur;
                         } 
                     } 
                 }); 
                 
-                // MAJ Input Nom Jeu
-                if(inputEditNomJeu) inputEditNomJeu.value = nomJeuActuel;
-
                 genererChampsSaisie(); 
                 mettreAJourScoresAffichage(); 
                 creerGraphique(); 
-                
                 if (monGraphique) { 
                       monGraphique.data.labels = ['Manche 0'];
                       joueurs.forEach((j, idx) => {
@@ -1148,11 +1124,13 @@ function afficherDetailsHistoriqueJeu(nomJeu) {
             });
         }
 
+        // BOUTON DEPLACEMENT/RENOMMAGE AJOUTÉ ICI
         div.innerHTML = `
             <div class="header-info">
                 <span class="time-date"><i class="far fa-calendar-alt"></i> ${dateStr} à ${heureStr}</span>
                 <div class="action-buttons">
                     <button class="voir-hist-btn" data-id="${partie.id}"><i class="fas fa-eye"></i> Voir</button>
+                    <button class="move-hist-btn" data-id="${partie.id}" data-oldname="${partie.nomJeu || ''}" style="background-color: #f39c12;"><i class="fas fa-pencil-alt"></i></button>
                     <button class="supprimer-hist-btn" data-id="${partie.id}"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
@@ -1291,36 +1269,12 @@ addPlayerToGraphBtn.addEventListener('click', () => {
     } 
 });
 
+// --- AUTRES HELPERS ---
+
 function genererChampsSaisie() { saisiePointsDiv.innerHTML = ''; joueurs.forEach((joueur, index) => { const div = document.createElement('div'); div.className = 'saisie-item'; div.innerHTML = ` <label for="score-${index}"> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} : </label> <input type="number" id="score-${index}" value="0"> `; saisiePointsDiv.appendChild(div); }); }
 function mettreAJourScoresAffichage() { scoreAffichageDiv.innerHTML = ''; let listePourAffichage = []; if (!scoresSecrets) { let joueursTries = [...joueurs].sort((a, b) => { return lowScoreWins ? a.scoreTotal - b.scoreTotal : b.scoreTotal - a.scoreTotal; }); listePourAffichage = calculerRangs(joueursTries); } else { listePourAffichage = joueurs; } let html = '<table class="classement-table">'; html += '<thead><tr><th>#</th><th>Joueur</th><th>Total</th></tr></thead>'; html += '<tbody>'; listePourAffichage.forEach((joueur) => { const rangAffichage = joueur.rang && !scoresSecrets ? joueur.rang : '-'; html += ` <tr> <td>${rangAffichage}</td> <td> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} </td> <td class="score-total">${scoresSecrets ? '???' : `${joueur.scoreTotal} pts`}</td> </tr> `; }); html += '</tbody></table>'; scoreAffichageDiv.innerHTML = html; }
 function mettreAJourCompteurs() { manchesPasseesAffichage.textContent = mancheActuelle; let restantesManches = Infinity; let afficherManchesRestantes = false; if (conditionsArret.manche_total.active) { const totalManches = conditionsArret.manche_total.mancheCible; restantesManches = Math.max(0, totalManches - mancheActuelle); afficherManchesRestantes = true; } if (conditionsArret.manche_restante.active) { const mancheCible = conditionsArret.manche_restante.mancheCible; const restantesDynamiques = Math.max(0, mancheCible - mancheActuelle); restantesManches = Math.min(restantesManches, restantesDynamiques); afficherManchesRestantes = true; } if (afficherManchesRestantes) { manchesRestantesAffichage.textContent = restantesManches; manchesRestantesAffichageDiv.classList.remove('cache'); } else { manchesRestantesAffichageDiv.classList.add('cache'); } let pointsMinRestants = Infinity; let afficherPointsRestants = false; if (conditionsArret.score_limite.active) { const scoreMax = Math.max(...joueurs.map(j => j.scoreTotal)); const restantsAbsolu = Math.max(0, conditionsArret.score_limite.valeur - scoreMax); pointsMinRestants = Math.min(pointsMinRestants, restantsAbsolu); afficherPointsRestants = true; } if (conditionsArret.score_relatif.active) { joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; const restantsRelatif = Math.max(0, limiteCible - joueur.scoreTotal); pointsMinRestants = Math.min(pointsMinRestants, restantsRelatif); }); afficherPointsRestants = true; } if (afficherPointsRestants) { pointsRestantsAffichage.textContent = pointsMinRestants; pointsRestantsAffichageDiv.classList.remove('cache'); } else { pointsRestantsAffichageDiv.classList.add('cache'); } }
-function verifierConditionsArret() { 
-    if (validerTourBouton.disabled) return; 
-    let doitTerminer = false; 
-    
-    // Conditions Scores
-    if (conditionsArret.score_limite.active && conditionsArret.score_limite.valeur > 0) { 
-        if (joueurs.some(j => j.scoreTotal >= conditionsArret.score_limite.valeur)) { doitTerminer = true; } 
-    } 
-    if (conditionsArret.score_relatif.active && conditionsArret.score_relatif.valeur > 0) { 
-        joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; if (joueur.scoreTotal >= limiteCible) { doitTerminer = true; } }); 
-    } 
-    
-    // Conditions Manches
-    if (conditionsArret.manche_total.active && mancheActuelle >= conditionsArret.manche_total.mancheCible && conditionsArret.manche_total.mancheCible > 0) { doitTerminer = true; } 
-    if (conditionsArret.manche_restante.active && mancheActuelle >= conditionsArret.manche_restante.mancheCible && conditionsArret.manche_restante.mancheCible > 0) { doitTerminer = true; } 
-    
-    // NOUVEAU : Condition Temps
-    if (conditionsArret.temps_limite && conditionsArret.temps_limite.active && conditionsArret.temps_limite.valeur > 0) {
-        // Conversion minutes en secondes
-        const limiteSecondes = conditionsArret.temps_limite.valeur * 60;
-        if (tempsJeuSecondes >= limiteSecondes) {
-            doitTerminer = true;
-        }
-    }
-
-    if (doitTerminer) { terminerPartie(); } 
-}
+function verifierConditionsArret() { if (validerTourBouton.disabled) return; let doitTerminer = false; if (conditionsArret.score_limite.active && conditionsArret.score_limite.valeur > 0) { if (joueurs.some(j => j.scoreTotal >= conditionsArret.score_limite.valeur)) { doitTerminer = true; } } if (conditionsArret.score_relatif.active && conditionsArret.score_relatif.valeur > 0) { joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; if (joueur.scoreTotal >= limiteCible) { doitTerminer = true; } }); } if (conditionsArret.manche_total.active && mancheActuelle >= conditionsArret.manche_total.mancheCible && conditionsArret.manche_total.mancheCible > 0) { doitTerminer = true; } if (conditionsArret.manche_restante.active && mancheActuelle >= conditionsArret.manche_restante.mancheCible && conditionsArret.manche_restante.mancheCible > 0) { doitTerminer = true; } if (doitTerminer) { terminerPartie(); } }
 function construirePodiumFinal() { currentStepSkipper = null; const podiumMap = { 1: document.getElementById('podium-1'), 2: document.getElementById('podium-2'), 3: document.getElementById('podium-3') }; Object.values(podiumMap).forEach(el => el.classList.remove('cache')); const premier = classementFinal.filter(j => j.rang === 1); const deuxieme = classementFinal.filter(j => j.rang === 2); const troisieme = classementFinal.filter(j => j.rang === 3); const remplirPlace = (element, joueursPlace) => { if (joueursPlace.length > 0) { const joueurRef = joueursPlace[0]; const noms = joueursPlace.map(j => j.nom).join(' & '); element.querySelector('.podium-nom').textContent = noms; element.querySelector('.podium-score').textContent = `${joueurRef.scoreTotal} pts`; element.style.borderColor = joueurRef.couleur; element.style.boxShadow = `0 0 15px ${joueurRef.couleur}80`; } else { element.classList.add('cache'); } }; remplirPlace(podiumMap[1], premier); remplirPlace(podiumMap[2], deuxieme); remplirPlace(podiumMap[3], troisieme); const autresListe = document.getElementById('autres-joueurs-liste'); autresListe.innerHTML = ''; const autresJoueurs = classementFinal.filter(j => j.rang > 3); if(autresJoueurs.length === 0) { document.getElementById('autres-joueurs').classList.add('cache'); } else { document.getElementById('autres-joueurs').classList.remove('cache'); autresJoueurs.sort((a, b) => a.rang - b.rang); autresJoueurs.forEach((joueur) => { const li = document.createElement('li'); li.innerHTML = ` <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> <strong>${joueur.rang}. ${joueur.nom}</strong> (${joueur.scoreTotal} pts) `; autresListe.appendChild(li); }); } const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); if (monGraphique) { monGraphique.resize(); } } }
 function majContenuReveal(rang, joueur, estExAequoPrecedent) { let rangTexte = `${rang}ème Place`; if (estExAequoPrecedent) { rangTexte = `Ex æquo ${rang}ème Place`; } if (rang === 3) rangTexte = `🥉 ${estExAequoPrecedent ? 'Ex æquo ' : ''}3ème Place`; if (rang === 1) rangTexte = `🥇 GAGNANT ${estExAequoPrecedent ? 'Ex æquo ' : ''}!`; revealRang.textContent = rangTexte; revealNom.textContent = joueur.nom; revealNom.style.color = joueur.couleur; revealScore.textContent = `${joueur.scoreTotal} points`; revealContent.classList.remove('is-revealed'); }
 async function demarrerSequenceReveal() { showPage('page-score'); revealEcran.classList.remove('cache'); let joueursAReveler = []; joueursAReveler.push(...classementFinal.filter(j => j.rang > 2).reverse()); joueursAReveler.push(...classementFinal.filter(j => j.rang === 1)); let rangPrecedent = null; for (const joueur of joueursAReveler) { if (sequenceForceStop) return; const rang = joueur.rang; const estExAequo = (rang === rangPrecedent); majContenuReveal(rang, joueur, estExAequo); revealContent.classList.add('slide-in-from-left'); await attendreFinAnimation(revealContent); revealContent.classList.remove('slide-in-from-left'); if (sequenceForceStop) return; await pause(1500); if (sequenceForceStop) return; revealContent.classList.add('shake-reveal'); await attendreFinAnimation(revealContent); revealContent.classList.remove('shake-reveal'); revealContent.classList.add('is-revealed'); if (sequenceForceStop) return; await pause(2500); if (sequenceForceStop) return; if (joueur !== joueursAReveler[joueursAReveler.length - 1]) { revealContent.classList.add('slide-out-to-right'); await attendreFinAnimation(revealContent); revealContent.classList.remove('slide-out-to-right', 'is-revealed'); } rangPrecedent = rang; } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); }
@@ -1332,6 +1286,7 @@ function creerGraphique() {
 
     const datasets = joueurs.map((joueur, index) => ({ 
         label: joueur.nom, 
+        // Si secret, on ne met PAS les données
         data: isSecret ? [] : [0], 
         borderColor: joueur.couleur, 
         backgroundColor: joueur.couleur + '33', 
@@ -1344,6 +1299,7 @@ function creerGraphique() {
         data: { labels: ['Manche 0'], datasets: datasets }, 
         options: { 
             responsive: true,
+            // AJOUT ICI : Maintien de l'aspect pour éviter l'écrasement, mais contrôlé par CSS
             maintainAspectRatio: false, 
             plugins: { legend: { position: 'top' }, title: { display: false } }, 
             scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } 
@@ -1352,6 +1308,7 @@ function creerGraphique() {
 }
 function mettreAJourGraphique() { 
     if (!monGraphique) { return; } 
+    // Si secret, on n'ajoute rien au graphique
     if (scoresSecrets) return;
 
     const labelManche = 'Manche ' + mancheActuelle; 
@@ -1363,82 +1320,15 @@ function mettreAJourGraphique() {
     }); 
     monGraphique.update(); 
 }
-function recreerGraphiqueFinal() { 
-    const graphContainer = document.querySelector('.graphique-container'); 
-    const graphPlaceholder = document.getElementById('graphique-final-container'); 
-    
-    if (graphContainer && graphPlaceholder) { 
-        if (!graphPlaceholder.contains(graphContainer)) { 
-            graphPlaceholder.innerHTML = ''; 
-            graphPlaceholder.appendChild(graphContainer); 
-        } 
-        graphContainer.classList.remove('cache');
-        graphContainer.style.display = 'block';
-    } 
-    
-    if (monGraphique) { monGraphique.destroy(); } 
-
-    const datasets = joueurs.map((joueur, index) => {
-        let scoreCumul = 0;
-        const dataPoints = [0]; 
-        
-        if (joueur.scoresTour && joueur.scoresTour.length > 0) {
-            for(let i = 0; i < joueur.scoresTour.length; i++) {
-                scoreCumul += joueur.scoresTour[i];
-                dataPoints.push(scoreCumul);
-            }
-        }
-
-        return { 
-            label: joueur.nom, 
-            data: dataPoints, 
-            borderColor: joueur.couleur, 
-            backgroundColor: joueur.couleur + '33', 
-            fill: false, 
-            tension: 0.1 
-        };
-    });
-
-    let maxManches = 0;
-    joueurs.forEach(j => {
-        if(j.scoresTour && j.scoresTour.length > maxManches) maxManches = j.scoresTour.length;
-    });
-
-    const labels = ['Manche 0'];
-    for(let i = 1; i <= maxManches; i++) {
-        labels.push(`Manche ${i}`);
-    }
-
-    monGraphique = new Chart(canvasGraphique, { 
-        type: 'line', 
-        data: { labels: labels, datasets: datasets }, 
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { legend: { position: 'top' } }, 
-            scales: { 
-                y: { title: { display: true, text: 'Points' } }, 
-                x: { title: { display: true, text: 'Manches' } } 
-            } 
-        } 
-    }); 
-}
-
-function mettreAJourConditionsArret() { for (const key in conditionsArret) { conditionsArret[key].active = false; } document.querySelectorAll('.condition-checkbox:checked').forEach(checkbox => { const type = checkbox.dataset.type; conditionsArret[type].active = true; const inputId = inputIdMap[type]; const inputElement = document.getElementById(inputId); const valeur = parseInt(inputElement.value, 10) || 0; if (type === 'score_limite') { conditionsArret.score_limite.valeur = valeur; } else if (type === 'score_relatif') { conditionsArret[type].valeur = valeur; joueurs.forEach(j => { j.scoreRelatifPivot = j.scoreTotal; }); } else if (type === 'manche_total') { conditionsArret.manche_total.mancheCible = valeur; } else if (type === 'manche_restante') { conditionsArret.manche_restante.mancheCible = mancheActuelle + valeur; } else if (type === 'temps_limite') { conditionsArret.temps_limite.valeur = valeur; } }); }
+function recreerGraphiqueFinal() { const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { if (!graphPlaceholder.contains(graphContainer)) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); } } if (monGraphique) { monGraphique.destroy(); } const datasets = joueurs.map((joueur, index) => ({ label: joueur.nom, data: [0], borderColor: joueur.couleur, backgroundColor: joueur.couleur + '33', fill: false, tension: 0.1 })); monGraphique = new Chart(canvasGraphique, { type: 'line', data: { labels: ['Manche 0'], datasets: datasets }, options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } } }); let scoreCumules = new Array(joueurs.length).fill(0); for (let i = 0; i < mancheActuelle; i++) { if(monGraphique.data.labels.length <= i + 1) { monGraphique.data.labels.push(`Manche ${i + 1}`); } joueurs.forEach((joueur, index) => { const scoreDeCeTour = (joueur.scoresTour && joueur.scoresTour[i]) ? joueur.scoresTour[i] : 0; scoreCumules[index] += scoreDeCeTour; if(monGraphique.data.datasets[index]) { monGraphique.data.datasets[index].data[i+1] = scoreCumules[index]; } }); } monGraphique.update(); monGraphique.resize(); }
+function mettreAJourConditionsArret() { for (const key in conditionsArret) { conditionsArret[key].active = false; } document.querySelectorAll('.condition-checkbox:checked').forEach(checkbox => { const type = checkbox.dataset.type; conditionsArret[type].active = true; const inputId = inputIdMap[type]; const inputElement = document.getElementById(inputId); const valeur = parseInt(inputElement.value, 10) || 0; if (type === 'score_limite') { conditionsArret.score_limite.valeur = valeur; } else if (type === 'score_relatif') { conditionsArret[type].valeur = valeur; joueurs.forEach(j => { j.scoreRelatifPivot = j.scoreTotal; }); } else if (type === 'manche_total') { conditionsArret.manche_total.mancheCible = valeur; } else if (type === 'manche_restante') { conditionsArret.manche_restante.mancheCible = mancheActuelle + valeur; } }); }
 conditionCheckboxes.forEach(checkbox => { checkbox.addEventListener('change', (e) => { const type = e.target.dataset.type; const inputId = inputIdMap[type]; const input = document.getElementById(inputId); if (input) { input.disabled = !checkbox.checked; } mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
-[scoreLimiteInput, scoreRelatifInput, nbManchesTotalInput, nbManchesRestantesInput, tempsLimiteInput].forEach(input => { if(input) input.addEventListener('change', () => { mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
+[scoreLimiteInput, scoreRelatifInput, nbManchesTotalInput, nbManchesRestantesInput].forEach(input => { input.addEventListener('change', () => { mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
 nomJoueurInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { ajouterBouton.click(); } });
 revealEcran.addEventListener('click', (e) => { if (e.target.closest('#skip-all-btn') || e.target.closest('#reveal-content')) { return; } if (currentStepSkipper) { currentStepSkipper(); } });
 skipAllBtn.addEventListener('click', () => { sequenceForceStop = true; if (currentStepSkipper) { currentStepSkipper(); } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); });
-
-// MODIFICATION ICI POUR LA NAVIGATION INTELLIGENTE
 retourAccueilBtn.addEventListener('click', () => { 
-    if (estModeHistorique) {
-        showPage('page-history-details'); 
-    } else {
-        showPage('page-ongoing-games'); 
-    }
-    
+    showPage('page-ongoing-games'); 
     const graphContainer = document.querySelector('.graphique-container'); 
     const graphOriginalParent = document.getElementById('page-score').querySelector('.score-gauche'); 
     const inputTourDiv = document.getElementById('page-score').querySelector('.input-tour'); 
@@ -1448,7 +1338,6 @@ retourAccueilBtn.addEventListener('click', () => {
     }
     resetConfigurationPartie();
 });
-
 function pause(ms) { return new Promise(resolve => { const timer = setTimeout(() => { currentStepSkipper = null; resolve(); }, ms); currentStepSkipper = () => { clearTimeout(timer); currentStepSkipper = null; resolve(); }; }); }
 function attendreFinAnimation(element) { return new Promise(resolve => { const onAnimEnd = () => { currentStepSkipper = null; resolve(); }; element.addEventListener('animationend', onAnimEnd, { once: true }); currentStepSkipper = () => { element.removeEventListener('animationend', onAnimEnd); currentStepSkipper = null; resolve(); }; }); }
 function calculerRangs(joueursTries) { let rangActuel = 0; let scorePrecedent = null; let nbExAequo = 1; joueursTries.forEach((joueur, index) => { if (joueur.scoreTotal !== scorePrecedent) { rangActuel += nbExAequo; nbExAequo = 1; } else { nbExAequo++; } joueur.rang = rangActuel; scorePrecedent = joueur.scoreTotal; }); return joueursTries; }
@@ -1461,4 +1350,95 @@ listeSuggestionsJoueurs.addEventListener('click', (e) => { const tag = e.target.
 addPlayerToGraphBtn.addEventListener('click', () => { const nom = historyPlayerSelect.value; if(nom && !joueursSurGraphique.includes(nom)) { joueursSurGraphique.push(nom); mettreAJourTagsGraphique(); const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); const parties = allHistoryData.filter(p => (p.nomJeu||"Parties") === nomJeu).sort((a,b)=>new Date(a.date)-new Date(b.date)); redessinerGraphiquePosition(parties); } });
 historyGridJeux.addEventListener('click', (e) => { const square = e.target.closest('.history-game-square'); if (square) afficherDetailsHistoriqueJeu(square.dataset.nomJeu); });
 historyBackBtn.addEventListener('click', () => { showPage('page-history-grid'); joueursSurGraphique = []; mettreAJourTagsGraphique(); if(monGraphiquePosition) { monGraphiquePosition.destroy(); monGraphiquePosition=null; } });
-listeHistoriquePartiesDetails.addEventListener('click', async (e) => { const target = e.target; const id = target.dataset.id; if (!id || !currentUser) return; if (target.classList.contains('supprimer-hist-btn')) { if (confirm("Supprimer ?")) { await db.collection('utilisateurs').doc(currentUser.uid).collection('historique').doc(id).delete(); await chargerHistoriqueParties(); const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); afficherDetailsHistoriqueJeu(nomJeu); } } if (target.classList.contains('voir-hist-btn')) { const partieData = allHistoryData.find(p => p.id === id); if (partieData) { classementFinal = partieData.classement; joueurs = partieData.joueursComplets; lowScoreWins = partieData.lowScoreWins; mancheActuelle = partieData.manches; estModeHistorique = true; const boutonRetour = document.getElementById('retour-accueil-btn'); if(boutonRetour) boutonRetour.textContent = "Retour à l'historique"; showPage('page-podium'); construirePodiumFinal(); recreerGraphiqueFinal(); } } });
+
+// CLICK LISTENER HISTORIQUE AVEC MODIF NAVIGATION ET RENOMMAGE
+listeHistoriquePartiesDetails.addEventListener('click', async (e) => { 
+    const target = e.target; 
+    
+    // GESTION BOUTON VOIR
+    if (target.classList.contains('voir-hist-btn') || target.closest('.voir-hist-btn')) { 
+        const btn = target.classList.contains('voir-hist-btn') ? target : target.closest('.voir-hist-btn');
+        const id = btn.dataset.id;
+        if (!id || !currentUser) return;
+
+        const partieData = allHistoryData.find(p => p.id === id); 
+        if (partieData) { 
+            classementFinal = partieData.classement; 
+            joueurs = partieData.joueursComplets; 
+            lowScoreWins = partieData.lowScoreWins; 
+            mancheActuelle = partieData.manches; 
+            
+            estModeHistorique = true;
+            const boutonRetour = document.getElementById('retour-accueil-btn');
+            if(boutonRetour) boutonRetour.textContent = "Retour à l'historique";
+
+            showPage('page-podium'); 
+            construirePodiumFinal(); 
+            recreerGraphiqueFinal(); 
+        } 
+        return;
+    } 
+
+    // GESTION BOUTON SUPPRIMER
+    if (target.classList.contains('supprimer-hist-btn') || target.closest('.supprimer-hist-btn')) { 
+        const btn = target.classList.contains('supprimer-hist-btn') ? target : target.closest('.supprimer-hist-btn');
+        const id = btn.dataset.id;
+        if (!id || !currentUser) return;
+
+        if (confirm("Supprimer ?")) { 
+            await db.collection('utilisateurs').doc(currentUser.uid).collection('historique').doc(id).delete(); 
+            await chargerHistoriqueParties(); 
+            const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); 
+            afficherDetailsHistoriqueJeu(nomJeu); 
+        } 
+        return;
+    }
+
+    // GESTION BOUTON DEPLACER/RENOMMER (NOUVEAU)
+    if (target.classList.contains('move-hist-btn') || target.closest('.move-hist-btn')) {
+        const btn = target.classList.contains('move-hist-btn') ? target : target.closest('.move-hist-btn');
+        idPartieARenommer = btn.dataset.id;
+        const ancienNom = btn.dataset.oldname;
+        
+        // Ouvrir la modal
+        inputRenameGame.value = ancienNom;
+        modalRename.classList.remove('cache');
+    }
+});
+
+// LOGIQUE MODALE DE RENOMMAGE
+btnCancelRename.addEventListener('click', () => {
+    modalRename.classList.add('cache');
+    idPartieARenommer = null;
+});
+
+btnConfirmRename.addEventListener('click', async () => {
+    if (!idPartieARenommer || !currentUser) return;
+    
+    const nouveauNom = inputRenameGame.value.trim();
+    if (!nouveauNom) {
+        alert("Veuillez entrer un nom.");
+        return;
+    }
+
+    // Mise à jour Firestore
+    try {
+        await db.collection('utilisateurs').doc(currentUser.uid).collection('historique').doc(idPartieARenommer).update({
+            nomJeu: nouveauNom
+        });
+        
+        modalRename.classList.add('cache');
+        
+        // Rafraichir l'affichage
+        await chargerHistoriqueParties();
+        await chargerCategoriesConnues(); // Met à jour l'autocomplétion
+        
+        // On retourne à la liste (qui sera vide si on a tout déplacé, ou pas)
+        const ancienNomJeuTitre = historyDetailsTitle.textContent.replace('Historique : ', '');
+        afficherDetailsHistoriqueJeu(ancienNomJeuTitre);
+
+    } catch (err) {
+        console.error("Erreur renommage : ", err);
+        alert("Erreur lors du renommage.");
+    }
+});
