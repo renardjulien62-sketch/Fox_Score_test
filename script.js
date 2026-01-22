@@ -1255,6 +1255,9 @@ function redessinerGraphiquePosition(partiesTrieesParDate) {
                             return context.dataset.label + ': ' + context.parsed.y + '%';
                         }
                     }
+                },
+                layout: {
+                    padding: 20
                 }
             }
         }
@@ -1301,7 +1304,13 @@ function creerGraphique() {
             responsive: true,
             // AJOUT ICI : Maintien de l'aspect pour éviter l'écrasement, mais contrôlé par CSS
             maintainAspectRatio: false, 
-            plugins: { legend: { position: 'top' }, title: { display: false } }, 
+            plugins: { 
+                legend: { position: 'top' }, 
+                title: { display: false },
+                layout: {
+                    padding: 20
+                }
+            }, 
             scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } 
         } 
     }); 
@@ -1320,7 +1329,7 @@ function mettreAJourGraphique() {
     }); 
     monGraphique.update(); 
 }
-function recreerGraphiqueFinal() { const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { if (!graphPlaceholder.contains(graphContainer)) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); } } if (monGraphique) { monGraphique.destroy(); } const datasets = joueurs.map((joueur, index) => ({ label: joueur.nom, data: [0], borderColor: joueur.couleur, backgroundColor: joueur.couleur + '33', fill: false, tension: 0.1 })); monGraphique = new Chart(canvasGraphique, { type: 'line', data: { labels: ['Manche 0'], datasets: datasets }, options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } } }); let scoreCumules = new Array(joueurs.length).fill(0); for (let i = 0; i < mancheActuelle; i++) { if(monGraphique.data.labels.length <= i + 1) { monGraphique.data.labels.push(`Manche ${i + 1}`); } joueurs.forEach((joueur, index) => { const scoreDeCeTour = (joueur.scoresTour && joueur.scoresTour[i]) ? joueur.scoresTour[i] : 0; scoreCumules[index] += scoreDeCeTour; if(monGraphique.data.datasets[index]) { monGraphique.data.datasets[index].data[i+1] = scoreCumules[index]; } }); } monGraphique.update(); monGraphique.resize(); }
+function recreerGraphiqueFinal() { const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { if (!graphPlaceholder.contains(graphContainer)) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); } } if (monGraphique) { monGraphique.destroy(); } const datasets = joueurs.map((joueur, index) => ({ label: joueur.nom, data: [0], borderColor: joueur.couleur, backgroundColor: joueur.couleur + '33', fill: false, tension: 0.1 })); monGraphique = new Chart(canvasGraphique, { type: 'line', data: { labels: ['Manche 0'], datasets: datasets }, options: { responsive: true, plugins: { legend: { position: 'top' }, layout: { padding: 20 } }, scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } } }); let scoreCumules = new Array(joueurs.length).fill(0); for (let i = 0; i < mancheActuelle; i++) { if(monGraphique.data.labels.length <= i + 1) { monGraphique.data.labels.push(`Manche ${i + 1}`); } joueurs.forEach((joueur, index) => { const scoreDeCeTour = (joueur.scoresTour && joueur.scoresTour[i]) ? joueur.scoresTour[i] : 0; scoreCumules[index] += scoreDeCeTour; if(monGraphique.data.datasets[index]) { monGraphique.data.datasets[index].data[i+1] = scoreCumules[index]; } }); } monGraphique.update(); monGraphique.resize(); }
 function mettreAJourConditionsArret() { for (const key in conditionsArret) { conditionsArret[key].active = false; } document.querySelectorAll('.condition-checkbox:checked').forEach(checkbox => { const type = checkbox.dataset.type; conditionsArret[type].active = true; const inputId = inputIdMap[type]; const inputElement = document.getElementById(inputId); const valeur = parseInt(inputElement.value, 10) || 0; if (type === 'score_limite') { conditionsArret.score_limite.valeur = valeur; } else if (type === 'score_relatif') { conditionsArret[type].valeur = valeur; joueurs.forEach(j => { j.scoreRelatifPivot = j.scoreTotal; }); } else if (type === 'manche_total') { conditionsArret.manche_total.mancheCible = valeur; } else if (type === 'manche_restante') { conditionsArret.manche_restante.mancheCible = mancheActuelle + valeur; } }); }
 conditionCheckboxes.forEach(checkbox => { checkbox.addEventListener('change', (e) => { const type = e.target.dataset.type; const inputId = inputIdMap[type]; const input = document.getElementById(inputId); if (input) { input.disabled = !checkbox.checked; } mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
 [scoreLimiteInput, scoreRelatifInput, nbManchesTotalInput, nbManchesRestantesInput].forEach(input => { input.addEventListener('change', () => { mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
