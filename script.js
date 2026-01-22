@@ -28,14 +28,16 @@ let conditionsArret = {
     score_limite: { active: false, valeur: 0 },
     score_relatif: { active: false, valeur: 0 },
     manche_total: { active: false, mancheCible: 0 },
-    manche_restante: { active: false, mancheCible: 0 }
+    manche_restante: { active: false, mancheCible: 0 },
+    temps_limite: { active: false, valeur: 0 } // NOUVEAU : Valeur en minutes
 };
 
 const inputIdMap = {
     'score_limite': 'score-limite',
     'score_relatif': 'score-relatif',
     'manche_total': 'nb-manches-total',
-    'manche_restante': 'nb-manches-restantes'
+    'manche_restante': 'nb-manches-restantes',
+    'temps_limite': 'temps-limite' // NOUVEAU
 };
 
 // MINUTEUR
@@ -99,6 +101,10 @@ const arreterMaintenantBouton = document.getElementById('arreter-maintenant');
 const saveFeedback = document.getElementById('save-feedback');
 const btnToggleGraph = document.getElementById('btn-toggle-graph'); 
 
+// NOUVEAU : Inputs modification nom jeu
+const inputEditNomJeu = document.getElementById('input-edit-nom-jeu');
+const btnUpdateNomJeu = document.getElementById('btn-update-nom-jeu');
+
 // Zones Affichage
 const suggestionsJoueursDiv = document.getElementById('suggestions-joueurs');
 const listeSuggestionsJoueurs = document.getElementById('liste-suggestions-joueurs');
@@ -111,7 +117,7 @@ const manchesRestantesAffichageDiv = document.getElementById('manches-restantes-
 const manchesRestantesAffichage = document.getElementById('manches-restantes');
 const pointsRestantsAffichageDiv = document.getElementById('points-restants-affichage');
 const pointsRestantsAffichage = document.getElementById('points-restants');
-const timerDisplay = document.getElementById('timer-display'); // MINUTEUR
+const timerDisplay = document.getElementById('timer-display'); 
 
 // Configs & Reveal
 const modeSecretConfig = document.getElementById('mode-secret-config');
@@ -120,6 +126,7 @@ const scoreLimiteInput = document.getElementById('score-limite');
 const scoreRelatifInput = document.getElementById('score-relatif');
 const nbManchesTotalInput = document.getElementById('nb-manches-total');
 const nbManchesRestantesInput = document.getElementById('nb-manches-restantes');
+const tempsLimiteInput = document.getElementById('temps-limite'); // NOUVEAU
 const revealEcran = document.getElementById('reveal-ecran');
 const revealContent = document.getElementById('reveal-content');
 const revealRang = document.getElementById('reveal-rang');
@@ -174,7 +181,6 @@ navLinks.forEach(link => {
         e.preventDefault();
         showPage(link.dataset.page);
         
-        // Si on quitte la page de score, on arrête le timer visuellement (mais il reprendra si on recharge)
         if (link.dataset.page !== 'page-score') {
             stopTimer();
         }
@@ -659,6 +665,9 @@ demarrerBouton.addEventListener('click', () => {
     mettreAJourCompteurs(); 
     creerGraphique();
     
+    // Initialiser le champ de modification du nom
+    if(inputEditNomJeu) inputEditNomJeu.value = nomJeuActuel;
+
     sauvegarderPartieEnCours(true);
 });
 
@@ -672,7 +681,6 @@ if(btnToggleGraph) {
                 graphContainer.classList.remove('cache');
                 graphContainer.style.display = 'block';
                 btnToggleGraph.textContent = "👁️ Masquer le Graphique";
-                // CORRECTION : Forcer le redimensionnement pour éviter l'effet "écrasé"
                 if(monGraphique) {
                     monGraphique.resize();
                 }
@@ -686,12 +694,26 @@ if(btnToggleGraph) {
     });
 }
 
+// LOGIQUE MODIFICATION NOM JEU
+if(btnUpdateNomJeu) {
+    btnUpdateNomJeu.addEventListener('click', () => {
+        const nouveauNom = inputEditNomJeu.value.trim();
+        if(nouveauNom) {
+            nomJeuActuel = nouveauNom;
+            sauvegarderPartieEnCours();
+            saveFeedback.textContent = "Nom mis à jour !";
+            saveFeedback.classList.remove('cache');
+            setTimeout(() => { saveFeedback.textContent = ""; }, 2000);
+        }
+    });
+}
+
 // =============================================================
-// 8. MINUTEUR (NOUVELLE SECTION)
+// 8. MINUTEUR
 // =============================================================
 function startTimer() {
-    stopTimer(); // Sécurité
-    updateTimerDisplay(); // Affiche 00:00 tout de suite
+    stopTimer(); 
+    updateTimerDisplay(); 
     timerInterval = setInterval(() => {
         tempsJeuSecondes++;
         updateTimerDisplay();
@@ -722,7 +744,7 @@ async function sauvegarderPartieEnCours(isNew = false) {
     const etatPartie = { 
         joueurs, mancheActuelle, scoresSecrets, lowScoreWins, conditionsArret, 
         nomJeuActuel, dernierSauvegarde: new Date().toISOString(),
-        tempsJeu: tempsJeuSecondes // On sauvegarde le temps
+        tempsJeu: tempsJeuSecondes 
     }; 
     
     const userRef = db.collection('utilisateurs').doc(currentUser.uid); 
@@ -827,6 +849,7 @@ listePartiesSauvegardees.addEventListener('click', e => {
                 validerTourBouton.disabled = false; 
                 arreterMaintenantBouton.disabled = false; 
                 
+                // RESET CHECKBOXES
                 document.querySelectorAll('.condition-checkbox').forEach(cb => { 
                     const type = cb.dataset.type; 
                     if (conditionsArret[type]) { 
@@ -834,16 +857,21 @@ listePartiesSauvegardees.addEventListener('click', e => {
                         const input = document.getElementById(inputIdMap[type]); 
                         if(input) { 
                             input.disabled = !cb.checked; 
-                            if (type === 'manche_total') input.value = conditionsArret[type].mancheCible; 
+                            // Cas spéciaux pour les inputs
+                            if (type === 'temps_limite') input.value = conditionsArret[type].valeur || 30; // Valeur
+                            else if (type === 'manche_total') input.value = conditionsArret[type].mancheCible; 
                             else if(type.includes('score')) input.value = conditionsArret[type].valeur;
                         } 
                     } 
                 }); 
                 
+                // MAJ Input Nom Jeu
+                if(inputEditNomJeu) inputEditNomJeu.value = nomJeuActuel;
+
                 genererChampsSaisie(); 
                 mettreAJourScoresAffichage(); 
                 creerGraphique(); 
-                // Même si secret, on peuple les données (car caché par CSS display:none)
+                
                 if (monGraphique) { 
                       monGraphique.data.labels = ['Manche 0'];
                       joueurs.forEach((j, idx) => {
@@ -914,24 +942,22 @@ async function terminerPartie() {
     validerTourBouton.disabled = true; 
     arreterMaintenantBouton.disabled = true; 
     
-    stopTimer(); // Arrêt du chrono
+    stopTimer(); 
 
     let joueursTries = [...joueurs].sort((a, b) => lowScoreWins ? a.scoreTotal - b.scoreTotal : b.scoreTotal - a.scoreTotal); 
     classementFinal = calculerRangs(joueursTries); 
     
     await sauvegarderHistoriquePartie(classementFinal); 
     
-    // Pour la navigation retour
     estModeHistorique = false;
     const boutonRetour = document.getElementById('retour-accueil-btn');
     if(boutonRetour) boutonRetour.textContent = "Retour à l'accueil";
 
     const graphContainer = document.querySelector('.graphique-container'); 
     
-    // --- CORRECTION FIN DE PARTIE : ON AFFICHE LE GRAPHIQUE ET ON RECALCULE ---
     if (graphContainer) {
         graphContainer.classList.remove('cache'); 
-        graphContainer.style.display = 'block'; // On force l'affichage
+        graphContainer.style.display = 'block'; 
         if(btnToggleGraph) btnToggleGraph.textContent = "👁️ Masquer le Graphique";
     }
     
@@ -939,10 +965,7 @@ async function terminerPartie() {
         scoresSecrets = false; 
         mettreAJourScoresAffichage(); 
         alert("Scores révélés !"); 
-        
-        // On force la reconstruction du graphique avec les vraies données
         recreerGraphiqueFinal(); 
-        
         setTimeout(demarrerSequenceReveal, 100); 
     } else { 
         mettreAJourScoresAffichage(); 
@@ -986,7 +1009,6 @@ async function chargerHistoriqueParties() {
             allHistoryData.push(data); 
         }); 
         
-        // Tri JS
         allHistoryData.sort((a,b) => new Date(b.date) - new Date(a.date));
 
         if (allHistoryData.length === 0) { 
@@ -1020,7 +1042,6 @@ async function chargerHistoriqueParties() {
 function afficherStatsGlobales() {
     if (allHistoryData.length === 0) return;
 
-    // 1. Top Jeux (Perf)
     const statsPerfJeu = {}; 
     allHistoryData.forEach(partie => {
         const nomJeu = partie.nomJeu || "Parties";
@@ -1056,13 +1077,11 @@ function afficherStatsGlobales() {
         statsTopJeuxListe.appendChild(li);
     });
 
-    // 2. Fréquence
     const partiesParJeu = {}; 
     allHistoryData.forEach(p => { const n = p.nomJeu || "Parties"; partiesParJeu[n] = (partiesParJeu[n]||0)+1; }); 
     const freqTries = Object.entries(partiesParJeu).sort((a,b)=>b[1]-a[1]).slice(0,3); 
     statsJeuxFrequenceListe.innerHTML = freqTries.map(([n,c]) => `<li>${n} <span>(${c})</span></li>`).join(''); 
 
-    // 3. Top Joueurs
     const compteJoueurs = {}; 
     allHistoryData.forEach(p => { (p.joueursComplets || p.classement).forEach(j => { compteJoueurs[j.nom] = (compteJoueurs[j.nom]||0)+1; }); }); 
     const joueursTries = Object.entries(compteJoueurs).sort((a,b)=>b[1]-a[1]).slice(0,3); 
@@ -1077,13 +1096,10 @@ function afficherDetailsHistoriqueJeu(nomJeu) {
     showPage('page-history-details');
     historyDetailsTitle.textContent = `Historique : ${nomJeu}`;
 
-    // Réinitialiser la case à cocher
     if(filterCommonGamesInput) filterCommonGamesInput.checked = false;
 
-    // Filtrer les données pour ce jeu (Global pour cette vue)
     const partiesDuJeu = allHistoryData.filter(p => (p.nomJeu || "Parties") === nomJeu);
 
-    // Remplir le select pour le graphique
     const joueursUniques = new Set();
     partiesDuJeu.forEach(p => {
         if (p.classement) p.classement.forEach(j => joueursUniques.add(j.nom));
@@ -1098,16 +1114,13 @@ function afficherDetailsHistoriqueJeu(nomJeu) {
         historyPlayerSelect.appendChild(opt);
     });
 
-    // Reset du graphique et des tags
     joueursSurGraphique = []; 
     if (monProfilLocal.nom && joueursUniques.has(monProfilLocal.nom)) {
         joueursSurGraphique.push(monProfilLocal.nom);
     }
     
-    // Initialisation du graphique avec les filtres
     actualiserGraphiqueAvecFiltres();
 
-    // Afficher la liste des parties (Toutes par défaut)
     listeHistoriquePartiesDetails.innerHTML = '';
     
     if (partiesDuJeu.length === 0) {
@@ -1157,25 +1170,20 @@ function afficherDetailsHistoriqueJeu(nomJeu) {
 function actualiserGraphiqueAvecFiltres() {
     mettreAJourTagsGraphique();
 
-    // 1. Récupérer le nom du jeu actuel depuis le titre
     const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', '');
     let parties = allHistoryData.filter(p => (p.nomJeu || "Parties") === nomJeu);
 
-    // 2. Appliquer le filtre "Parties Communes" si coché
     if (filterCommonGamesInput && filterCommonGamesInput.checked && joueursSurGraphique.length > 0) {
         parties = parties.filter(partie => {
             const nomsDansLaPartie = partie.classement.map(j => j.nom);
-            // Vérifie si TOUS les joueurs sélectionnés sont présents dans cette partie
             return joueursSurGraphique.every(joueurSelectionne => nomsDansLaPartie.includes(joueurSelectionne));
         });
     }
 
-    // 3. Trier par date et dessiner
     parties.sort((a, b) => new Date(a.date) - new Date(b.date));
     redessinerGraphiquePosition(parties);
 }
 
-// Écouteur sur la case à cocher
 if(filterCommonGamesInput) {
     filterCommonGamesInput.addEventListener('change', actualiserGraphiqueAvecFiltres);
 }
@@ -1275,7 +1283,6 @@ function redessinerGraphiquePosition(partiesTrieesParDate) {
     });
 }
 
-// Modif Bouton Ajouter Joueur Graphique pour appeler la nouvelle fonction
 addPlayerToGraphBtn.addEventListener('click', () => { 
     const nom = historyPlayerSelect.value; 
     if(nom && !joueursSurGraphique.includes(nom)) { 
@@ -1284,12 +1291,36 @@ addPlayerToGraphBtn.addEventListener('click', () => {
     } 
 });
 
-// --- AUTRES HELPERS ---
-
 function genererChampsSaisie() { saisiePointsDiv.innerHTML = ''; joueurs.forEach((joueur, index) => { const div = document.createElement('div'); div.className = 'saisie-item'; div.innerHTML = ` <label for="score-${index}"> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} : </label> <input type="number" id="score-${index}" value="0"> `; saisiePointsDiv.appendChild(div); }); }
 function mettreAJourScoresAffichage() { scoreAffichageDiv.innerHTML = ''; let listePourAffichage = []; if (!scoresSecrets) { let joueursTries = [...joueurs].sort((a, b) => { return lowScoreWins ? a.scoreTotal - b.scoreTotal : b.scoreTotal - a.scoreTotal; }); listePourAffichage = calculerRangs(joueursTries); } else { listePourAffichage = joueurs; } let html = '<table class="classement-table">'; html += '<thead><tr><th>#</th><th>Joueur</th><th>Total</th></tr></thead>'; html += '<tbody>'; listePourAffichage.forEach((joueur) => { const rangAffichage = joueur.rang && !scoresSecrets ? joueur.rang : '-'; html += ` <tr> <td>${rangAffichage}</td> <td> <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> ${joueur.nom} </td> <td class="score-total">${scoresSecrets ? '???' : `${joueur.scoreTotal} pts`}</td> </tr> `; }); html += '</tbody></table>'; scoreAffichageDiv.innerHTML = html; }
 function mettreAJourCompteurs() { manchesPasseesAffichage.textContent = mancheActuelle; let restantesManches = Infinity; let afficherManchesRestantes = false; if (conditionsArret.manche_total.active) { const totalManches = conditionsArret.manche_total.mancheCible; restantesManches = Math.max(0, totalManches - mancheActuelle); afficherManchesRestantes = true; } if (conditionsArret.manche_restante.active) { const mancheCible = conditionsArret.manche_restante.mancheCible; const restantesDynamiques = Math.max(0, mancheCible - mancheActuelle); restantesManches = Math.min(restantesManches, restantesDynamiques); afficherManchesRestantes = true; } if (afficherManchesRestantes) { manchesRestantesAffichage.textContent = restantesManches; manchesRestantesAffichageDiv.classList.remove('cache'); } else { manchesRestantesAffichageDiv.classList.add('cache'); } let pointsMinRestants = Infinity; let afficherPointsRestants = false; if (conditionsArret.score_limite.active) { const scoreMax = Math.max(...joueurs.map(j => j.scoreTotal)); const restantsAbsolu = Math.max(0, conditionsArret.score_limite.valeur - scoreMax); pointsMinRestants = Math.min(pointsMinRestants, restantsAbsolu); afficherPointsRestants = true; } if (conditionsArret.score_relatif.active) { joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; const restantsRelatif = Math.max(0, limiteCible - joueur.scoreTotal); pointsMinRestants = Math.min(pointsMinRestants, restantsRelatif); }); afficherPointsRestants = true; } if (afficherPointsRestants) { pointsRestantsAffichage.textContent = pointsMinRestants; pointsRestantsAffichageDiv.classList.remove('cache'); } else { pointsRestantsAffichageDiv.classList.add('cache'); } }
-function verifierConditionsArret() { if (validerTourBouton.disabled) return; let doitTerminer = false; if (conditionsArret.score_limite.active && conditionsArret.score_limite.valeur > 0) { if (joueurs.some(j => j.scoreTotal >= conditionsArret.score_limite.valeur)) { doitTerminer = true; } } if (conditionsArret.score_relatif.active && conditionsArret.score_relatif.valeur > 0) { joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; if (joueur.scoreTotal >= limiteCible) { doitTerminer = true; } }); } if (conditionsArret.manche_total.active && mancheActuelle >= conditionsArret.manche_total.mancheCible && conditionsArret.manche_total.mancheCible > 0) { doitTerminer = true; } if (conditionsArret.manche_restante.active && mancheActuelle >= conditionsArret.manche_restante.mancheCible && conditionsArret.manche_restante.mancheCible > 0) { doitTerminer = true; } if (doitTerminer) { terminerPartie(); } }
+function verifierConditionsArret() { 
+    if (validerTourBouton.disabled) return; 
+    let doitTerminer = false; 
+    
+    // Conditions Scores
+    if (conditionsArret.score_limite.active && conditionsArret.score_limite.valeur > 0) { 
+        if (joueurs.some(j => j.scoreTotal >= conditionsArret.score_limite.valeur)) { doitTerminer = true; } 
+    } 
+    if (conditionsArret.score_relatif.active && conditionsArret.score_relatif.valeur > 0) { 
+        joueurs.forEach(joueur => { let limiteCible = (joueur.scoreRelatifPivot || 0) + conditionsArret.score_relatif.valeur; if (joueur.scoreTotal >= limiteCible) { doitTerminer = true; } }); 
+    } 
+    
+    // Conditions Manches
+    if (conditionsArret.manche_total.active && mancheActuelle >= conditionsArret.manche_total.mancheCible && conditionsArret.manche_total.mancheCible > 0) { doitTerminer = true; } 
+    if (conditionsArret.manche_restante.active && mancheActuelle >= conditionsArret.manche_restante.mancheCible && conditionsArret.manche_restante.mancheCible > 0) { doitTerminer = true; } 
+    
+    // NOUVEAU : Condition Temps
+    if (conditionsArret.temps_limite && conditionsArret.temps_limite.active && conditionsArret.temps_limite.valeur > 0) {
+        // Conversion minutes en secondes
+        const limiteSecondes = conditionsArret.temps_limite.valeur * 60;
+        if (tempsJeuSecondes >= limiteSecondes) {
+            doitTerminer = true;
+        }
+    }
+
+    if (doitTerminer) { terminerPartie(); } 
+}
 function construirePodiumFinal() { currentStepSkipper = null; const podiumMap = { 1: document.getElementById('podium-1'), 2: document.getElementById('podium-2'), 3: document.getElementById('podium-3') }; Object.values(podiumMap).forEach(el => el.classList.remove('cache')); const premier = classementFinal.filter(j => j.rang === 1); const deuxieme = classementFinal.filter(j => j.rang === 2); const troisieme = classementFinal.filter(j => j.rang === 3); const remplirPlace = (element, joueursPlace) => { if (joueursPlace.length > 0) { const joueurRef = joueursPlace[0]; const noms = joueursPlace.map(j => j.nom).join(' & '); element.querySelector('.podium-nom').textContent = noms; element.querySelector('.podium-score').textContent = `${joueurRef.scoreTotal} pts`; element.style.borderColor = joueurRef.couleur; element.style.boxShadow = `0 0 15px ${joueurRef.couleur}80`; } else { element.classList.add('cache'); } }; remplirPlace(podiumMap[1], premier); remplirPlace(podiumMap[2], deuxieme); remplirPlace(podiumMap[3], troisieme); const autresListe = document.getElementById('autres-joueurs-liste'); autresListe.innerHTML = ''; const autresJoueurs = classementFinal.filter(j => j.rang > 3); if(autresJoueurs.length === 0) { document.getElementById('autres-joueurs').classList.add('cache'); } else { document.getElementById('autres-joueurs').classList.remove('cache'); autresJoueurs.sort((a, b) => a.rang - b.rang); autresJoueurs.forEach((joueur) => { const li = document.createElement('li'); li.innerHTML = ` <span class="score-couleur-swatch" style="background-color: ${joueur.couleur};"></span> <strong>${joueur.rang}. ${joueur.nom}</strong> (${joueur.scoreTotal} pts) `; autresListe.appendChild(li); }); } const graphContainer = document.querySelector('.graphique-container'); const graphPlaceholder = document.getElementById('graphique-final-container'); if (graphContainer && graphPlaceholder) { graphPlaceholder.innerHTML = ''; graphPlaceholder.appendChild(graphContainer); if (monGraphique) { monGraphique.resize(); } } }
 function majContenuReveal(rang, joueur, estExAequoPrecedent) { let rangTexte = `${rang}ème Place`; if (estExAequoPrecedent) { rangTexte = `Ex æquo ${rang}ème Place`; } if (rang === 3) rangTexte = `🥉 ${estExAequoPrecedent ? 'Ex æquo ' : ''}3ème Place`; if (rang === 1) rangTexte = `🥇 GAGNANT ${estExAequoPrecedent ? 'Ex æquo ' : ''}!`; revealRang.textContent = rangTexte; revealNom.textContent = joueur.nom; revealNom.style.color = joueur.couleur; revealScore.textContent = `${joueur.scoreTotal} points`; revealContent.classList.remove('is-revealed'); }
 async function demarrerSequenceReveal() { showPage('page-score'); revealEcran.classList.remove('cache'); let joueursAReveler = []; joueursAReveler.push(...classementFinal.filter(j => j.rang > 2).reverse()); joueursAReveler.push(...classementFinal.filter(j => j.rang === 1)); let rangPrecedent = null; for (const joueur of joueursAReveler) { if (sequenceForceStop) return; const rang = joueur.rang; const estExAequo = (rang === rangPrecedent); majContenuReveal(rang, joueur, estExAequo); revealContent.classList.add('slide-in-from-left'); await attendreFinAnimation(revealContent); revealContent.classList.remove('slide-in-from-left'); if (sequenceForceStop) return; await pause(1500); if (sequenceForceStop) return; revealContent.classList.add('shake-reveal'); await attendreFinAnimation(revealContent); revealContent.classList.remove('shake-reveal'); revealContent.classList.add('is-revealed'); if (sequenceForceStop) return; await pause(2500); if (sequenceForceStop) return; if (joueur !== joueursAReveler[joueursAReveler.length - 1]) { revealContent.classList.add('slide-out-to-right'); await attendreFinAnimation(revealContent); revealContent.classList.remove('slide-out-to-right', 'is-revealed'); } rangPrecedent = rang; } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); }
@@ -1301,7 +1332,6 @@ function creerGraphique() {
 
     const datasets = joueurs.map((joueur, index) => ({ 
         label: joueur.nom, 
-        // Si secret, on ne met PAS les données
         data: isSecret ? [] : [0], 
         borderColor: joueur.couleur, 
         backgroundColor: joueur.couleur + '33', 
@@ -1314,7 +1344,6 @@ function creerGraphique() {
         data: { labels: ['Manche 0'], datasets: datasets }, 
         options: { 
             responsive: true,
-            // AJOUT ICI : Maintien de l'aspect pour éviter l'écrasement, mais contrôlé par CSS
             maintainAspectRatio: false, 
             plugins: { legend: { position: 'top' }, title: { display: false } }, 
             scales: { y: { title: { display: true, text: 'Points' } }, x: { title: { display: true, text: 'Manches' } } } 
@@ -1323,7 +1352,6 @@ function creerGraphique() {
 }
 function mettreAJourGraphique() { 
     if (!monGraphique) { return; } 
-    // Si secret, on n'ajoute rien au graphique
     if (scoresSecrets) return;
 
     const labelManche = 'Manche ' + mancheActuelle; 
@@ -1335,8 +1363,6 @@ function mettreAJourGraphique() {
     }); 
     monGraphique.update(); 
 }
-
-// --- FONCTION CORRIGÉE POUR LA FIN DE PARTIE ---
 function recreerGraphiqueFinal() { 
     const graphContainer = document.querySelector('.graphique-container'); 
     const graphPlaceholder = document.getElementById('graphique-final-container'); 
@@ -1346,21 +1372,16 @@ function recreerGraphiqueFinal() {
             graphPlaceholder.innerHTML = ''; 
             graphPlaceholder.appendChild(graphContainer); 
         } 
-        // On s'assure que c'est visible
         graphContainer.classList.remove('cache');
         graphContainer.style.display = 'block';
     } 
     
     if (monGraphique) { monGraphique.destroy(); } 
 
-    // On prépare les données complètes (historique)
     const datasets = joueurs.map((joueur, index) => {
-        // On reconstruit l'historique des points cumulés
         let scoreCumul = 0;
-        const dataPoints = [0]; // Manche 0 = 0 pts
+        const dataPoints = [0]; 
         
-        // On parcourt toutes les manches jouées via l'array scoresTour directement
-        // C'est plus sûr que d'utiliser mancheActuelle comme borne
         if (joueur.scoresTour && joueur.scoresTour.length > 0) {
             for(let i = 0; i < joueur.scoresTour.length; i++) {
                 scoreCumul += joueur.scoresTour[i];
@@ -1378,8 +1399,6 @@ function recreerGraphiqueFinal() {
         };
     });
 
-    // On prépare les labels (Manche 0, Manche 1...)
-    // On trouve le joueur qui a le plus de manches pour définir l'axe X
     let maxManches = 0;
     joueurs.forEach(j => {
         if(j.scoresTour && j.scoresTour.length > maxManches) maxManches = j.scoresTour.length;
@@ -1395,7 +1414,7 @@ function recreerGraphiqueFinal() {
         data: { labels: labels, datasets: datasets }, 
         options: { 
             responsive: true, 
-            maintainAspectRatio: false, // Important pour le CSS min-height
+            maintainAspectRatio: false, 
             plugins: { legend: { position: 'top' } }, 
             scales: { 
                 y: { title: { display: true, text: 'Points' } }, 
@@ -1405,9 +1424,9 @@ function recreerGraphiqueFinal() {
     }); 
 }
 
-function mettreAJourConditionsArret() { for (const key in conditionsArret) { conditionsArret[key].active = false; } document.querySelectorAll('.condition-checkbox:checked').forEach(checkbox => { const type = checkbox.dataset.type; conditionsArret[type].active = true; const inputId = inputIdMap[type]; const inputElement = document.getElementById(inputId); const valeur = parseInt(inputElement.value, 10) || 0; if (type === 'score_limite') { conditionsArret.score_limite.valeur = valeur; } else if (type === 'score_relatif') { conditionsArret[type].valeur = valeur; joueurs.forEach(j => { j.scoreRelatifPivot = j.scoreTotal; }); } else if (type === 'manche_total') { conditionsArret.manche_total.mancheCible = valeur; } else if (type === 'manche_restante') { conditionsArret.manche_restante.mancheCible = mancheActuelle + valeur; } }); }
+function mettreAJourConditionsArret() { for (const key in conditionsArret) { conditionsArret[key].active = false; } document.querySelectorAll('.condition-checkbox:checked').forEach(checkbox => { const type = checkbox.dataset.type; conditionsArret[type].active = true; const inputId = inputIdMap[type]; const inputElement = document.getElementById(inputId); const valeur = parseInt(inputElement.value, 10) || 0; if (type === 'score_limite') { conditionsArret.score_limite.valeur = valeur; } else if (type === 'score_relatif') { conditionsArret[type].valeur = valeur; joueurs.forEach(j => { j.scoreRelatifPivot = j.scoreTotal; }); } else if (type === 'manche_total') { conditionsArret.manche_total.mancheCible = valeur; } else if (type === 'manche_restante') { conditionsArret.manche_restante.mancheCible = mancheActuelle + valeur; } else if (type === 'temps_limite') { conditionsArret.temps_limite.valeur = valeur; } }); }
 conditionCheckboxes.forEach(checkbox => { checkbox.addEventListener('change', (e) => { const type = e.target.dataset.type; const inputId = inputIdMap[type]; const input = document.getElementById(inputId); if (input) { input.disabled = !checkbox.checked; } mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
-[scoreLimiteInput, scoreRelatifInput, nbManchesTotalInput, nbManchesRestantesInput].forEach(input => { input.addEventListener('change', () => { mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
+[scoreLimiteInput, scoreRelatifInput, nbManchesTotalInput, nbManchesRestantesInput, tempsLimiteInput].forEach(input => { if(input) input.addEventListener('change', () => { mettreAJourConditionsArret(); mettreAJourCompteurs(); }); });
 nomJoueurInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { ajouterBouton.click(); } });
 revealEcran.addEventListener('click', (e) => { if (e.target.closest('#skip-all-btn') || e.target.closest('#reveal-content')) { return; } if (currentStepSkipper) { currentStepSkipper(); } });
 skipAllBtn.addEventListener('click', () => { sequenceForceStop = true; if (currentStepSkipper) { currentStepSkipper(); } revealEcran.classList.add('cache'); showPage('page-podium'); construirePodiumFinal(); });
@@ -1415,12 +1434,11 @@ skipAllBtn.addEventListener('click', () => { sequenceForceStop = true; if (curre
 // MODIFICATION ICI POUR LA NAVIGATION INTELLIGENTE
 retourAccueilBtn.addEventListener('click', () => { 
     if (estModeHistorique) {
-        showPage('page-history-details'); // Retour à la liste des parties de ce jeu
+        showPage('page-history-details'); 
     } else {
-        showPage('page-ongoing-games'); // Retour à l'accueil
+        showPage('page-ongoing-games'); 
     }
     
-    // Nettoyage graphique
     const graphContainer = document.querySelector('.graphique-container'); 
     const graphOriginalParent = document.getElementById('page-score').querySelector('.score-gauche'); 
     const inputTourDiv = document.getElementById('page-score').querySelector('.input-tour'); 
@@ -1443,38 +1461,4 @@ listeSuggestionsJoueurs.addEventListener('click', (e) => { const tag = e.target.
 addPlayerToGraphBtn.addEventListener('click', () => { const nom = historyPlayerSelect.value; if(nom && !joueursSurGraphique.includes(nom)) { joueursSurGraphique.push(nom); mettreAJourTagsGraphique(); const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); const parties = allHistoryData.filter(p => (p.nomJeu||"Parties") === nomJeu).sort((a,b)=>new Date(a.date)-new Date(b.date)); redessinerGraphiquePosition(parties); } });
 historyGridJeux.addEventListener('click', (e) => { const square = e.target.closest('.history-game-square'); if (square) afficherDetailsHistoriqueJeu(square.dataset.nomJeu); });
 historyBackBtn.addEventListener('click', () => { showPage('page-history-grid'); joueursSurGraphique = []; mettreAJourTagsGraphique(); if(monGraphiquePosition) { monGraphiquePosition.destroy(); monGraphiquePosition=null; } });
-
-// CLICK LISTENER HISTORIQUE AVEC MODIF NAVIGATION
-listeHistoriquePartiesDetails.addEventListener('click', async (e) => { 
-    const target = e.target; 
-    const id = target.dataset.id; 
-    if (!id || !currentUser) return; 
-    
-    if (target.classList.contains('supprimer-hist-btn')) { 
-        if (confirm("Supprimer ?")) { 
-            await db.collection('utilisateurs').doc(currentUser.uid).collection('historique').doc(id).delete(); 
-            await chargerHistoriqueParties(); 
-            const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); 
-            afficherDetailsHistoriqueJeu(nomJeu); 
-        } 
-    } 
-    
-    if (target.classList.contains('voir-hist-btn')) { 
-        const partieData = allHistoryData.find(p => p.id === id); 
-        if (partieData) { 
-            classementFinal = partieData.classement; 
-            joueurs = partieData.joueursComplets; 
-            lowScoreWins = partieData.lowScoreWins; 
-            mancheActuelle = partieData.manches; 
-            
-            // On active le mode historique pour le bouton retour
-            estModeHistorique = true;
-            const boutonRetour = document.getElementById('retour-accueil-btn');
-            if(boutonRetour) boutonRetour.textContent = "Retour à l'historique";
-
-            showPage('page-podium'); 
-            construirePodiumFinal(); 
-            recreerGraphiqueFinal(); 
-        } 
-    } 
-});
+listeHistoriquePartiesDetails.addEventListener('click', async (e) => { const target = e.target; const id = target.dataset.id; if (!id || !currentUser) return; if (target.classList.contains('supprimer-hist-btn')) { if (confirm("Supprimer ?")) { await db.collection('utilisateurs').doc(currentUser.uid).collection('historique').doc(id).delete(); await chargerHistoriqueParties(); const nomJeu = historyDetailsTitle.textContent.replace('Historique : ', ''); afficherDetailsHistoriqueJeu(nomJeu); } } if (target.classList.contains('voir-hist-btn')) { const partieData = allHistoryData.find(p => p.id === id); if (partieData) { classementFinal = partieData.classement; joueurs = partieData.joueursComplets; lowScoreWins = partieData.lowScoreWins; mancheActuelle = partieData.manches; estModeHistorique = true; const boutonRetour = document.getElementById('retour-accueil-btn'); if(boutonRetour) boutonRetour.textContent = "Retour à l'historique"; showPage('page-podium'); construirePodiumFinal(); recreerGraphiqueFinal(); } } });
